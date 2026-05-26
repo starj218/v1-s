@@ -1,109 +1,121 @@
-// server.js (Node.js + Socket.io 서버)
+// Render 전용 멀티 매칭 온라인 총게임 백엔드 서버 (server.js)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
-    cors: { origin: "*" } // 모든 클라이언트 접속 허용
+    cors: { origin: "*" }
 });
 
-let lobbyPlayers = {}; // 로비에 있는 플레이어들
-let activeRooms = {};   // 현재 진행 중인 게임방들
-let readyPlayers = []; // 발판에 올라선 플레이어 ID 목록
+let lobbyPlayers = {}; // 로비 플레이어 데이터
+// 각 발판(A, B, C)별로 대기 중인 유저 목록 관리
+let readyPads = {
+    'A': [],
+    'B': [],
+    'C': []
+};
 
 io.on('connection', (socket) => {
-    console.log(`🎮 유저 접속함: ${socket.id}`);
+    console.log(`🎮 유저 접속: ${socket.id}`);
 
-    // 새로운 플레이어 초기화
+    // 초기 체력 100 설정
     lobbyPlayers[socket.id] = {
         id: socket.id,
-        pos: { x: (Math.random() - 0.5) * 5, y: 1.6, z: 12 }, // 스폰 분산
+        pos: { x: (Math.random() - 0.5) * 5, y: 1.6, z: 12 },
         rotY: 0,
         hp: 100,
-        isReady: false
+        currentPad: null
     };
 
-    // 기존 플레이어 목록을 새로 들어온 유저에게 전달
     socket.emit('currentPlayers', lobbyPlayers);
-    // 다른 유저들에게 내가 접속했음을 알림
     socket.broadcast.emit('newPlayer', lobbyPlayers[socket.id]);
 
-    // 실시간 위치/움직임 동기화
     socket.on('playerMovement', (movementData) => {
         if (lobbyPlayers[socket.id]) {
             lobbyPlayers[socket.id].pos = movementData.pos;
             lobbyPlayers[socket.id].rotY = movementData.rotY;
-            // 다른 모든 유저에게 내 위치 브로드캐스팅
             socket.broadcast.emit('playerMoved', lobbyPlayers[socket.id]);
         }
     });
 
-    // 매칭 발판 상태 동기화 (발판 오르내릴 때)
-    socket.on('toggleReady', (isReady) => {
+    // 어떤 발판(padId)에 올라가거나 내려왔을 때 처리
+    socket.on('toggleReady', (data) => {
         if (!lobbyPlayers[socket.id]) return;
-        
-        lobbyPlayers[socket.id].isReady = isReady;
-        
+        const { padId, isReady } = data;
+
         if (isReady) {
-            if (!readyPlayers.includes(socket.id)) readyPlayers.push(socket.id);
+            // 다른 발판에 이미 들어가 있다면 제거
+            if (lobbyPlayers[socket.id].currentPad && lobbyPlayers[socket.id].currentPad !== padId) {
+                const oldPad = lobbyPlayers[socket.id].currentPad;
+                readyPads[oldPad] = readyPads[oldPad].filter(id => id !== socket.id);
+            }
+            
+            lobbyPlayers[socket.id].currentPad = padId;
+            if (!readyPads[padId].includes(socket.id)) {
+                readyPads[padId].push(socket.id);
+            }
         } else {
-            readyPlayers = readyPlayers.filter(id => id !== socket.id);
+            if (lobbyPlayers[socket.id].currentPad === padId) {
+                lobbyPlayers[socket.id].currentPad = null;
+                readyPads[padId] = readyPads[padId].filter(id => id !== socket.id);
+            }
         }
 
-        // 전체 유저에게 발판 대기 상태 전송
+        // 모든 유저에게 각 발판들의 인원 상태를 브로드캐스트
         io.emit('readyStatusUpdate', {
-            readyCount: readyPlayers.length,
-            lobbyPlayers: lobbyPlayers
+            padA: readyPads['A'].length,
+            padB: readyPads['B'].length,
+            padC: readyPads['C'].length
         });
 
-        // 💡 2명이 발판에 올라오면 즉시 1v1 아레나 매칭 완료!
-        if (readyPlayers.length >= 2) {
-            const p1 = readyPlayers.shift();
-            const p2 = readyPlayers.shift();
-            const roomId = `room_${Date.now()}`;
+        // 특정 발판에 2명이 모이면 그 발판 유저들끼리 즉시 매칭!
+        if (readyPads[padId].length >= 2) {
+            const p1 = readyPads[padId].shift();
+            const p2 = readyPads[padId].shift();
+            const roomId = `room_${padId}_${Date.now()}`;
 
-            activeRooms[roomId] = { p1, p2 };
+            lobbyPlayers[p1].currentPad = null;
+            lobbyPlayers[p2].currentPad = null;
 
-            // 발판 준비 상태 강제 리셋
-            if(lobbyPlayers[p1]) lobbyPlayers[p1].isReady = false;
-            if(lobbyPlayers[p2]) lobbyPlayers[p2].isReady = false;
-
-            // 두 유저에게 매칭 완료 및 매치 룸 전송 (순간이동 명령)
-            io.to(p1).emit('matchFound', { roomId, role: 'p1', opponent: p2 });
-            io.to(p2).emit('matchFound', { roomId, role: 'p2', opponent: p1 });
-
-            // 로비에 남은 유저들에게 발판 리셋 반영
-            io.emit('readyStatusUpdate', { readyCount: readyPlayers.length, lobbyPlayers: lobbyPlayers });
+            io.to(p1).emit('matchFound', { roomId, role: 'p1', opponentId: p2, padId });
+            io.to(p2).emit('matchFound', { roomId, role: 'p2', opponentId: p1, padId });
+            
+            // 매칭 후 발판 인원 재공지
+            io.emit('readyStatusUpdate', {
+                padA: readyPads['A'].length,
+                padB: readyPads['B'].length,
+                padC: readyPads['C'].length
+            });
         }
     });
 
-    // 실시간 사격 이벤트 동기화 (상대방 화면에 탄도 궤적 그리기용)
-    socket.on('shoot', (shootData) => {
-        socket.broadcast.emit('opponentShoot', shootData);
+    socket.on('shoot', (shootData) => { socket.broadcast.emit('opponentShoot', shootData); });
+    
+    // 타격 판정: 헤드건 몸통이건 상관없이 무조건 고정 데미지를 주어 15발 맞으면 죽게 설계
+    socket.on('hitPlayer', (data) => { 
+        io.to(data.targetId).emit('damaged', { damage: data.damage }); 
     });
-
-    // 타격 판정 및 데미지 동기화
-    socket.on('hitPlayer', (data) => {
-        // data = { targetId, damage }
-        io.to(data.targetId).emit('damaged', { damage: data.damage, attacker: socket.id });
-    });
-
-    // 대결 종료 (사망 시 로비 송환)
+    
     socket.on('matchOver', (data) => {
-        // data = { roomId, winnerId, loserId }
         io.to(data.winnerId).emit('gameResult', 'win');
         io.to(data.loserId).emit('gameResult', 'lose');
     });
 
-    // 연결 종료 시 리셋
     socket.on('disconnect', () => {
-        console.log(`❌ 유저 나감: ${socket.id}`);
+        console.log(`❌ 유저 퇴장: ${socket.id}`);
+        const padId = lobbyPlayers[socket.id]?.currentPad;
+        if (padId) {
+            readyPads[padId] = readyPads[padId].filter(id => id !== socket.id);
+        }
         delete lobbyPlayers[socket.id];
-        readyPlayers = readyPlayers.filter(id => id !== socket.id);
         io.emit('playerDisconnected', socket.id);
+        io.emit('readyStatusUpdate', {
+            padA: readyPads['A']?.length || 0,
+            padB: readyPads['B']?.length || 0,
+            padC: readyPads['C']?.length || 0
+        });
     });
 });
 
-const PORT = 3000;
-http.listen(PORT, () => {
-    console.log(`🚀 멀티플레이어 게임 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
+const listener = http.listen(process.env.PORT || 3000, () => {
+    console.log(`🚀 서버가 포트 ${listener.address().port}에서 작동 중입니다!`);
 });
