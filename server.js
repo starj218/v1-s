@@ -1,4 +1,4 @@
-// Render 전용 9개 매칭 패드 온라인 총게임 백엔드 서버 (server.js)
+// Render 전용 멀티 매칭 온라인 총게임 백엔드 서버 (server.js)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -6,26 +6,18 @@ const io = require('socket.io')(http, {
     cors: { origin: "*" }
 });
 
-let lobbyPlayers = {}; 
-// 9개의 발판(A ~ I) 대기 목록 생성
+let lobbyPlayers = {}; // 로비 플레이어 데이터
+// 각 발판(A, B, C)별로 대기 중인 유저 목록 관리
 let readyPads = {
-    'A': [], 'B': [], 'C': [],
-    'D': [], 'E': [], 'F': [],
-    'G': [], 'H': [], 'I': []
+    'A': [],
+    'B': [],
+    'C': []
 };
-
-// 실시간 인원 상태를 묶어서 모든 유저에게 보내주는 함수
-function broadcastPadStatus() {
-    let status = {};
-    Object.keys(readyPads).forEach(padId => {
-        status[padId] = readyPads[padId].length;
-    });
-    io.emit('readyStatusUpdate', status);
-}
 
 io.on('connection', (socket) => {
     console.log(`🎮 유저 접속: ${socket.id}`);
 
+    // 초기 체력 100 설정
     lobbyPlayers[socket.id] = {
         id: socket.id,
         pos: { x: (Math.random() - 0.5) * 5, y: 1.6, z: 12 },
@@ -36,7 +28,6 @@ io.on('connection', (socket) => {
 
     socket.emit('currentPlayers', lobbyPlayers);
     socket.broadcast.emit('newPlayer', lobbyPlayers[socket.id]);
-    broadcastPadStatus(); // 접속하자마자 발판 인원 갱신
 
     socket.on('playerMovement', (movementData) => {
         if (lobbyPlayers[socket.id]) {
@@ -46,11 +37,13 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 어떤 발판(padId)에 올라가거나 내려왔을 때 처리
     socket.on('toggleReady', (data) => {
         if (!lobbyPlayers[socket.id]) return;
         const { padId, isReady } = data;
 
         if (isReady) {
+            // 다른 발판에 이미 들어가 있다면 제거
             if (lobbyPlayers[socket.id].currentPad && lobbyPlayers[socket.id].currentPad !== padId) {
                 const oldPad = lobbyPlayers[socket.id].currentPad;
                 readyPads[oldPad] = readyPads[oldPad].filter(id => id !== socket.id);
@@ -67,10 +60,15 @@ io.on('connection', (socket) => {
             }
         }
 
-        broadcastPadStatus();
+        // 모든 유저에게 각 발판들의 인원 상태를 브로드캐스트
+        io.emit('readyStatusUpdate', {
+            padA: readyPads['A'].length,
+            padB: readyPads['B'].length,
+            padC: readyPads['C'].length
+        });
 
-        // 어떤 패드든 2명이 차면 즉시 별도 룸으로 던져 매칭 시작!
-        if (readyPads[padId] && readyPads[padId].length >= 2) {
+        // 특정 발판에 2명이 모이면 그 발판 유저들끼리 즉시 매칭!
+        if (readyPads[padId].length >= 2) {
             const p1 = readyPads[padId].shift();
             const p2 = readyPads[padId].shift();
             const roomId = `room_${padId}_${Date.now()}`;
@@ -81,12 +79,21 @@ io.on('connection', (socket) => {
             io.to(p1).emit('matchFound', { roomId, role: 'p1', opponentId: p2, padId });
             io.to(p2).emit('matchFound', { roomId, role: 'p2', opponentId: p1, padId });
             
-            broadcastPadStatus();
+            // 매칭 후 발판 인원 재공지
+            io.emit('readyStatusUpdate', {
+                padA: readyPads['A'].length,
+                padB: readyPads['B'].length,
+                padC: readyPads['C'].length
+            });
         }
     });
 
     socket.on('shoot', (shootData) => { socket.broadcast.emit('opponentShoot', shootData); });
-    socket.on('hitPlayer', (data) => { io.to(data.targetId).emit('damaged', { damage: data.damage }); });
+    
+    // 타격 판정: 헤드건 몸통이건 상관없이 무조건 고정 데미지를 주어 15발 맞으면 죽게 설계
+    socket.on('hitPlayer', (data) => { 
+        io.to(data.targetId).emit('damaged', { damage: data.damage }); 
+    });
     
     socket.on('matchOver', (data) => {
         io.to(data.winnerId).emit('gameResult', 'win');
@@ -96,12 +103,16 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log(`❌ 유저 퇴장: ${socket.id}`);
         const padId = lobbyPlayers[socket.id]?.currentPad;
-        if (padId && readyPads[padId]) {
+        if (padId) {
             readyPads[padId] = readyPads[padId].filter(id => id !== socket.id);
         }
         delete lobbyPlayers[socket.id];
         io.emit('playerDisconnected', socket.id);
-        broadcastPadStatus();
+        io.emit('readyStatusUpdate', {
+            padA: readyPads['A']?.length || 0,
+            padB: readyPads['B']?.length || 0,
+            padC: readyPads['C']?.length || 0
+        });
     });
 });
 
