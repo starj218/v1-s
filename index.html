@@ -2,38 +2,49 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>로블록스 라이벌 스타일 - 실시간 멀티플레이어 1v1</title>
+    <title>ONLINE FPS ARENA - 온라인 총게임</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; user-select: none; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
-        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.8); }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.9); }
         #crosshair::before { top: 4px; left: -5px; width: 20px; height: 2px; }
         #crosshair::after { top: -5px; left: 4px; width: 2px; height: 20px; }
-        #damage-indicator { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; border: 0px solid rgba(239, 68, 68, 0); pointer-events: none; transition: all 0.1s; z-index: 5; }
-        .damaged { border: 20px solid rgba(239, 68, 68, 0.6) !important; }
+        #damage-flash { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; transition: all 0.1s; z-index: 5; }
+        .hit { background-color: rgba(239, 68, 68, 0.4); border: 15px solid rgba(239, 68, 68, 0.6); }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
 
-    <div id="damage-indicator"></div>
+    <div id="damage-flash"></div>
 
     <div class="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none z-10">
-        <div class="bg-black/60 p-3 rounded-lg border border-gray-700">
-            <div class="text-xs text-gray-400 font-bold uppercase">구역</div>
+        <div class="bg-black/70 p-3 rounded-lg border border-gray-800">
+            <div class="text-xs text-gray-500 font-bold uppercase">상태</div>
             <div id="game-status" class="text-xl font-black text-amber-400">대기실 (LOBBY)</div>
         </div>
 
-        <div class="bg-black/60 p-4 rounded-lg border border-gray-700 text-center mx-auto min-w-[250px]">
-            <div class="text-xs text-gray-400 font-bold mb-1">1v1 배틀 패드 상태</div>
-            <div class="text-lg font-black text-green-400" id="match-status-text">대기 중 (0 / 2)</div>
-            <div class="text-[11px] text-gray-400 mt-1">노란 발판 위로 올라가면 매칭이 수락됩니다.</div>
+        <div class="bg-black/70 p-3 rounded-lg border border-gray-800 text-center mx-auto min-w-[400px] flex gap-3 justify-around">
+            <div>
+                <div class="text-[11px] text-amber-400 font-bold">배틀 패드 [A]</div>
+                <div class="text-lg font-black text-white" id="pad-a-text">0 / 2</div>
+            </div>
+            <div class="border-l border-gray-800 h-8 self-center"></div>
+            <div>
+                <div class="text-[11px] text-purple-400 font-bold">배틀 패드 [B]</div>
+                <div class="text-lg font-black text-white" id="pad-b-text">0 / 2</div>
+            </div>
+            <div class="border-l border-gray-800 h-8 self-center"></div>
+            <div>
+                <div class="text-[11px] text-cyan-400 font-bold">배틀 패드 [C]</div>
+                <div class="text-lg font-black text-white" id="pad-c-text">0 / 2</div>
+            </div>
         </div>
 
-        <div class="bg-black/60 p-3 rounded-lg border border-gray-700 text-right">
-            <div class="text-xs text-gray-400 font-bold">내 전적</div>
+        <div class="bg-black/70 p-3 rounded-lg border border-gray-800 text-right">
+            <div class="text-xs text-gray-500 font-bold">내 전적</div>
             <div class="text-xl font-black text-white"><span id="score-win" class="text-green-400">0</span>승 <span id="score-lose" class="text-red-400">0</span>패</div>
         </div>
     </div>
@@ -41,80 +52,80 @@
     <div id="crosshair"></div>
 
     <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 pointer-events-none z-10 flex flex-col gap-3">
-        <div id="versus-container" class="flex justify-between items-center bg-black/60 p-3 rounded-xl border border-white/10 opacity-0 transition-opacity">
+        <div id="hp-versus-container" class="flex justify-between items-center bg-black/70 p-3 rounded-xl border border-white/10 opacity-0 transition-opacity">
             <div class="w-2/5">
                 <div class="flex justify-between text-xs font-bold mb-1"><span class="text-blue-400">나</span> <span id="my-hp-text">100 HP</span></div>
                 <div class="w-full bg-gray-800 h-3 rounded-full overflow-hidden"><div id="my-hp-bar" class="bg-blue-500 h-full w-full"></div></div>
             </div>
-            <div class="font-black italic text-amber-500 text-lg">VS</div>
+            <div class="font-black italic text-rose-500 text-xl">VS</div>
             <div class="w-2/5 text-right">
-                <div class="flex justify-between text-xs font-bold mb-1 flex-row-reverse"><span class="text-red-400">상대방</span> <span id="enemy-hp-text">100 HP</span></div>
+                <div class="flex justify-between text-xs font-bold mb-1 flex-row-reverse"><span class="text-red-400">상대</span> <span id="enemy-hp-text">100 HP</span></div>
                 <div class="w-full bg-gray-800 h-3 rounded-full overflow-hidden"><div id="enemy-hp-bar" class="bg-red-500 h-full w-full float-right"></div></div>
             </div>
         </div>
 
         <div class="flex justify-between items-end">
-            <div class="bg-black/60 p-3 rounded-lg text-xs text-gray-300">
-                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | <span class="text-amber-400 font-bold">클릭</span>: 연사 사격
+            <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300">
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | <span class="text-amber-400 font-bold">클릭</span>: 사격 (15방 매치 규칙)
             </div>
-            <div class="bg-black/80 px-6 py-3 rounded-xl border border-amber-500 flex items-center gap-4">
-                <div><div class="text-[10px] text-amber-400 font-bold">RIFLE</div><div class="text-md font-bold">M4A1-ONLINE</div></div>
-                <div class="text-2xl font-black text-amber-400"><span id="current-ammo">30</span>/30</div>
+            <div class="bg-black/90 px-6 py-3 rounded-xl border border-amber-500 flex items-center gap-4">
+                <div class="text-right text-3xl font-black text-amber-400"><span id="current-ammo">30</span>/30</div>
+                <div class="text-[11px] text-gray-400 font-bold uppercase">AMMO</div>
             </div>
         </div>
     </div>
 
-    <div id="intro-modal" class="absolute top-0 left-0 w-full h-full bg-black/90 flex flex-col justify-center items-center z-50">
-        <div class="max-w-sm text-center p-6 bg-gray-800 rounded-2xl border border-amber-500/30">
-            <h1 class="text-3xl font-black text-amber-500 mb-4">RIVALS MULTIPLAYER</h1>
-            <button id="start-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-black font-extrabold py-3 px-6 rounded-xl text-md transition-all">
-                서버 접속하여 플레이하기
-            </button>
-        </div>
+    <div id="intro-modal" class="absolute top-0 left-0 w-full h-full bg-black/95 flex flex-col justify-center items-center z-50 transition-opacity">
+        <h1 class="text-4xl font-black text-amber-500 mb-6 tracking-wider">ONLINE FPS ARENA</h1>
+        <button id="start-btn" class="bg-amber-500 hover:bg-amber-600 text-black font-extrabold py-4 px-8 rounded-xl text-lg transition-transform active:scale-95 pointer-events-auto">
+            게임 서버 접속하기
+        </button>
     </div>
 
     <div id="canvas-container"></div>
 
     <script>
-        // --- 네트워크 연동 설정 ---
-        // 로컬 환경 테스트 시 고정 IP 혹은 'http://localhost:3000' 입력
-       const socket = io('https://online-fps-server.onrender.com'); // 👈 꼭 내 진짜 렌더 주소여야 합니다!
+        // ⚠️ 내 렌더 주소가 올바르게 들어가 있는지 확인하세요!
+        const socket = io('https://online-fps-server.onrender.com'); 
+
         const PLAYER_SPEED = 0.12;
         const JUMP_FORCE = 0.08;
         const GRAVITY = 0.0035;
         const PLAYER_HEIGHT = 1.6;
+        const DAMAGE_PER_SHOT = 6.7; // 💥 고정 데미지 6.7 (정확히 15방 맞으면 체력 100 소진되어 종료!)
 
         let scene, camera, renderer;
         let keys = {};
-        let otherPlayers = {}; // 내 화면에 렌더링될 다른 온라인 유저 객체들
+        let otherPlayers = {}; 
         
-        let myPad, rivalPad;
+        // 3개의 발판 오브젝트 및 정보 배열
+        let pads = [];
         const padRadius = 2.0;
+        
+        let gameMode = 'lobby'; 
         let currentRoomId = null;
         let myRole = null;
         let opponentId = null;
-        let gameMode = 'lobby';
+        let activatedPadId = null; // 현재 내가 서 있는 발판 ID ('A', 'B', 'C' 또는 null)
 
-        // 나의 물리/전투 상태 변수
         let player = {
             hp: 100,
             ammo: 30,
             maxAmmo: 30,
             isReloading: false,
-            pos: new THREE.Vector3(0, PLAYER_HEIGHT, 12),
+            pos: new THREE.Vector3(0, PLAYER_HEIGHT, 12), 
             velocity: new THREE.Vector3(),
             isGrounded: true,
+            isShooting: false,
             lastShotTime: 0,
-            shootDelay: 120,
-            isShooting: false
+            shootDelay: 120
         };
 
-        let gunGroup;
+        let gunModel;
         let isLocked = false;
         const pitchObject = new THREE.Object3D();
         const yawObject = new THREE.Object3D();
 
-        // DOM 캐싱
         const startBtn = document.getElementById('start-btn');
         const introModal = document.getElementById('intro-modal');
         const currentAmmoEl = document.getElementById('current-ammo');
@@ -122,10 +133,16 @@
         const myHpText = document.getElementById('my-hp-text');
         const enemyHpBar = document.getElementById('enemy-hp-bar');
         const enemyHpText = document.getElementById('enemy-hp-text');
-        const matchStatusText = document.getElementById('match-status-text');
-        const versusContainer = document.getElementById('versus-container');
+        const versusContainer = document.getElementById('hp-versus-container');
         const gameStatusEl = document.getElementById('game-status');
-        const damageIndicator = document.getElementById('damage-indicator');
+        const damageFlashEl = document.getElementById('damage-flash');
+        const scoreWinEl = document.getElementById('score-win');
+        const scoreLoseEl = document.getElementById('score-lose');
+
+        // 발판 텍스트 엘리먼트들
+        const padAText = document.getElementById('pad-a-text');
+        const padBText = document.getElementById('pad-b-text');
+        const padCText = document.getElementById('pad-c-text');
 
         function init() {
             scene = new THREE.Scene();
@@ -143,17 +160,15 @@
             renderer.shadowMap.enabled = true;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // 라이팅 설정
             scene.add(new THREE.AmbientLight(0xffffff, 0.5));
             const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
             dirLight.position.set(10, 30, 10);
             scene.add(dirLight);
 
-            buildMaps();
-            createPlayerWeapon();
-            setupNetworkEvents();
+            buildLobbyAndArena();
+            createPlayerGun();
+            setupNetworkingEvents();
 
-            // 이벤트 바인딩
             window.addEventListener('resize', onWindowResize);
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
@@ -165,27 +180,20 @@
 
             startBtn.addEventListener('click', () => {
                 document.body.requestPointerLock();
-                introModal.style.display = 'none';
+                introModal.style.opacity = '0';
+                setTimeout(() => introModal.style.display = 'none', 300);
             });
         }
 
-        // --- 실시간 네트워크 이벤트 처리 (Socket.io) ---
-        function setupNetworkEvents() {
-            // 1. 현재 접속해 있는 전체 유저 목록 동기화 받아 모델링 생성
+        function setupNetworkingEvents() {
             socket.on('currentPlayers', (players) => {
                 Object.keys(players).forEach((id) => {
-                    if (id !== socket.id) {
-                        createRemotePlayerMesh(id, players[id].pos);
-                    }
+                    if (id !== socket.id) spawnOtherPlayerMesh(id, players[id].pos);
                 });
             });
 
-            // 2. 다른 유저가 새로 서버에 들어왔을 때
-            socket.on('newPlayer', (playerInfo) => {
-                createRemotePlayerMesh(playerInfo.id, playerInfo.pos);
-            });
+            socket.on('newPlayer', (playerInfo) => { spawnOtherPlayerMesh(playerInfo.id, playerInfo.pos); });
 
-            // 3. 다른 유저가 움직였을 때 실시간 화면 트래킹 적용
             socket.on('playerMoved', (playerInfo) => {
                 if (otherPlayers[playerInfo.id]) {
                     otherPlayers[playerInfo.id].position.copy(playerInfo.pos);
@@ -193,52 +201,56 @@
                 }
             });
 
-            // 4. 누군가 발판 대기열 상태를 바꿨을 때 UI 갱신
+            // 발판 실시간 유저 인원 갱신 수신
             socket.on('readyStatusUpdate', (data) => {
-                matchStatusText.innerText = `매칭 대기 중 (${data.readyCount} / 2)`;
+                padAText.innerText = `${data.padA} / 2`;
+                padBText.innerText = `${data.padB} / 2`;
+                padCText.innerText = `${data.padC} / 2`;
+                
+                // 가독성을 위해 인원이 차면 초록색으로 하이라이트
+                padAText.className = data.padA > 0 ? "text-lg font-black text-green-400" : "text-lg font-black text-white";
+                padBText.className = data.padB > 0 ? "text-lg font-black text-green-400" : "text-lg font-black text-white";
+                padCText.className = data.padC > 0 ? "text-lg font-black text-green-400" : "text-lg font-black text-white";
             });
 
-            // 5. 💥 매칭 성사 완료 신호 수신 (아레나 텔레포트)
             socket.on('matchFound', (data) => {
                 currentRoomId = data.roomId;
                 myRole = data.role;
-                opponentId = data.opponent;
+                opponentId = data.opponentId;
                 gameMode = 'match';
 
-                gameStatusEl.innerText = "1v1 매치 아레나";
+                gameStatusEl.innerText = `1v1 매치 아레나 [패드 ${data.padId}]`;
                 gameStatusEl.className = "text-xl font-black text-rose-500 animate-pulse";
                 versusContainer.classList.remove('opacity-0');
 
-                // 진영 분산 순간이동(TP)
+                // 진영 배치
                 if (myRole === 'p1') {
                     yawObject.position.set(0, PLAYER_HEIGHT, -22);
+                    yawObject.rotation.y = 0;
                 } else {
                     yawObject.position.set(0, PLAYER_HEIGHT, -48);
+                    yawObject.rotation.y = Math.PI; 
                 }
+                
                 player.hp = 100;
-                updateHpUI(100, 100);
+                player.ammo = player.maxAmmo;
+                currentAmmoEl.innerText = player.ammo;
+                updateVersusUI(100, 100);
             });
 
-            // 6. 상대방이 총을 쐈을 때 탄도 이펙트 시각화 수신
-            socket.on('opponentShoot', (data) => {
-                renderTracerEffect(data.start, data.end, 0xef4444);
-            });
+            socket.on('opponentShoot', (data) => { renderTracerTrail(data.start, data.end, 0xef4444); });
 
-            // 7. 내가 데미지를 입었을 때
             socket.on('damaged', (data) => {
                 player.hp = Math.max(0, player.hp - data.damage);
-                updateHpUI(player.hp, null);
-
-                damageIndicator.classList.add('damaged');
-                setTimeout(() => damageIndicator.classList.remove('damaged'), 120);
+                updateVersusUI(player.hp, null);
+                damageFlashEl.className = 'hit';
+                setTimeout(() => damageFlashEl.className = '', 100);
 
                 if (player.hp <= 0) {
-                    // 패배 통보 처리
-                    socket.emit('matchOver', { roomId: currentRoomId, winnerId: opponentId, loserId: socket.id });
+                    socket.emit('matchOver', { winnerId: opponentId, loserId: socket.id });
                 }
             });
 
-            // 8. 최종 대결 승패 결과 정산 후 로비 송환
             socket.on('gameResult', (result) => {
                 gameMode = 'lobby';
                 versusContainer.classList.add('opacity-0');
@@ -246,19 +258,19 @@
                 gameStatusEl.className = "text-xl font-black text-amber-400";
                 
                 if(result === 'win') {
-                    document.getElementById('score-win').innerText = parseInt(document.getElementById('score-win').innerText) + 1;
-                    alert("👑 대결 승리! 라이벌을 꺾었습니다.");
+                    scoreWinEl.innerText = parseInt(scoreWinEl.innerText) + 1;
+                    showResultAlert("👑 대결 승리!", "text-green-400");
                 } else {
-                    document.getElementById('score-lose').innerText = parseInt(document.getElementById('score-lose').innerText) + 1;
-                    alert("💀 패배했습니다. 컨트롤을 연마하세요!");
+                    scoreLoseEl.innerText = parseInt(scoreLoseEl.innerText) + 1;
+                    showResultAlert("💀 대결 패배...", "text-red-400");
                 }
 
-                // 로비로 강제 역스폰 복귀
+                // 로비 리스폰
                 yawObject.position.set((Math.random() - 0.5) * 5, PLAYER_HEIGHT, 12);
-                socket.emit('toggleReady', false); // 준비 해제 보장
+                yawObject.rotation.set(0, 0, 0);
+                activatedPadId = null;
             });
 
-            // 9. 다른 유저 접속 끊김
             socket.on('playerDisconnected', (id) => {
                 if (otherPlayers[id]) {
                     scene.remove(otherPlayers[id]);
@@ -267,75 +279,80 @@
             });
         }
 
-        // --- 맵 빌딩 및 상대 캐릭터 리소스 메싱 ---
-        function buildMaps() {
-            // 로비 및 아레나 바닥
-            const lobbyFloor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+        function buildLobbyAndArena() {
+            // 로비 바닥
+            const lobbyFloorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            const lobbyFloor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), lobbyFloorMat);
             lobbyFloor.rotation.x = -Math.PI / 2;
             scene.add(lobbyFloor);
 
-            const arenaFloor = new THREE.Mesh(new THREE.BoxGeometry(40, 1, 40), new THREE.MeshStandardMaterial({ color: 0x0f172a }));
+            // 전투 아레나 바닥
+            const arenaFloorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 });
+            const arenaFloor = new THREE.Mesh(new THREE.BoxGeometry(40, 1, 40), arenaFloorMat);
             arenaFloor.position.set(0, -0.5, -35);
             scene.add(arenaFloor);
 
-            // 중앙 장애물 빌딩
-            const obstacle = new THREE.Mesh(new THREE.BoxGeometry(6, 5, 6), new THREE.MeshStandardMaterial({ color: 0x475569 }));
-            obstacle.position.set(0, 2.5, -35);
-            scene.add(obstacle);
+            // 중앙 장애물
+            const obsMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+            const obs = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), obsMat);
+            obs.position.set(0, 3, -35);
+            scene.add(obs);
 
-            // 1v1 매칭 발판 배치 (공동 중앙 수렴형)
-            const padGeo = new THREE.CylinderGeometry(padRadius, padRadius, 0.1, 32);
-            const padMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, emissiveIntensity: 0.3 });
-            
-            myPad = new THREE.Mesh(padGeo, padMat);
-            myPad.position.set(0, 0.05, 5); // 이 발판 위에 두명 다 올라서면 매칭 조건 충족 시뮬레이션
-            scene.add(myPad);
+            // 🌟 대기실 매칭 발판 3개 생성 (A: 주황, B: 보라, C: 하늘)
+            const padConfigs = [
+                { id: 'A', x: -6, z: 6, color: 0xf59e0b },
+                { id: 'B', x: 0, z: 6, color: 0xa855f7 },
+                { id: 'C', x: 6, z: 6, color: 0x06b6d4 }
+            ];
+
+            padConfigs.forEach(config => {
+                const padMesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(padRadius, padRadius, 0.1, 32),
+                    new THREE.MeshStandardMaterial({ color: config.color, emissive: config.color, emissiveIntensity: 0.3 })
+                );
+                padMesh.position.set(config.x, 0.05, config.z);
+                scene.add(padMesh);
+                
+                // 추후 감지 연산을 위해 저장
+                pads.push({ id: config.id, x: config.x, z: config.z });
+            });
         }
 
-        function createRemotePlayerMesh(id, pos) {
+        function spawnOtherPlayerMesh(id, pos) {
             const group = new THREE.Group();
-            // 몸통
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 0.6), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
             body.position.y = 0.9;
             group.add(body);
-            // 머리 (헤드샷 판정용 박스 히트맵핑 적용 가능)
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
             head.position.y = 2.1;
-            head.userData = { targetId: id, isHead: true };
             group.add(head);
 
-            body.userData = { targetId: id, isHead: false };
-
+            body.userData = { targetId: id };
+            head.userData = { targetId: id };
             group.position.copy(pos);
             scene.add(group);
             otherPlayers[id] = group;
         }
 
-        function createPlayerWeapon() {
-            gunGroup = new THREE.Group();
+        function createPlayerGun() {
+            gunModel = new THREE.Group();
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 1.0), new THREE.MeshStandardMaterial({ color: 0x334155 }));
-            gunGroup.add(body);
-            gunGroup.position.set(0.25, -0.2, -0.4);
-            camera.add(gunGroup);
+            gunModel.add(body);
+            gunModel.position.set(0.25, -0.2, -0.4); 
+            camera.add(gunModel);
         }
 
-        // --- 조작 및 키 리스너 (점프 추가) ---
         function onKeyDown(e) {
             keys[e.code] = true;
-
-            // 🦘 [스페이스바] 점프 메커니즘 발동 구현
             if (e.code === 'Space' && player.isGrounded && isLocked) {
                 player.velocity.y = JUMP_FORCE;
                 player.isGrounded = false;
             }
-
             if (e.code === 'KeyR' && player.ammo < player.maxAmmo && !player.isReloading) {
-                reloadWeapon();
+                reloadPlayerWeapon();
             }
         }
-
         function onKeyUp(e) { keys[e.code] = false; }
-
         function onMouseMove(e) {
             if (!isLocked) return;
             yawObject.rotation.y -= e.movementX * 0.0022;
@@ -343,25 +360,23 @@
             pitchObject.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchObject.rotation.x));
         }
 
-        function reloadWeapon() {
+        function reloadPlayerWeapon() {
             player.isReloading = true;
+            currentAmmoEl.innerText = "장전 중";
+            currentAmmoEl.classList.add('animate-pulse', 'text-amber-300');
             setTimeout(() => {
                 player.ammo = player.maxAmmo;
                 currentAmmoEl.innerText = player.ammo;
+                currentAmmoEl.classList.remove('animate-pulse', 'text-amber-300');
                 player.isReloading = false;
             }, 1200);
         }
 
-        function updateHpUI(myHp, enemyHp) {
-            if(myHp !== null) {
-                myHpBar.style.width = myHp + '%';
-                myHpText.innerText = `${myHp} HP`;
+        function handleWeaponShooting() {
+            if (!isLocked || player.isReloading || player.ammo <= 0) {
+                if(player.ammo <= 0 && isLocked) reloadPlayerWeapon();
+                return;
             }
-        }
-
-        // --- 실시간 레이캐스트 사격 및 명중 네트워킹 트래커 ---
-        function fireActiveWeapon() {
-            if (!isLocked || player.isReloading) return;
             const now = performance.now();
             if (now - player.lastShotTime < player.shootDelay) return;
 
@@ -369,61 +384,44 @@
             player.ammo--;
             currentAmmoEl.innerText = player.ammo;
 
-            // 레이캐스팅 정중앙 조준 사격 처리
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
-            // 탄도 라인 연산을 위한 출발 원점 좌표 추출
             const startVec = new THREE.Vector3(0.15, -0.15, -0.4).unproject(camera);
             let endVec = new THREE.Vector3();
             raycaster.ray.at(100, endVec);
 
-            // 히트 스캔 필터링 대상 추출
             const targetMeshes = [];
-            Object.values(otherPlayers).forEach(p => {
-                p.traverse(child => { if(child.isMesh) targetMeshes.push(child); });
-            });
+            Object.values(otherPlayers).forEach(p => p.traverse(c => { if(c.isMesh) targetMeshes.push(c); }));
 
             const intersects = raycaster.intersectObjects(targetMeshes);
             if (intersects.length > 0) {
                 const hit = intersects[0];
                 endVec.copy(hit.point);
 
-                // 상대방 타격 성공 시 네트워크 데미지 브로드캐스팅 패킷 송신
                 if (gameMode === 'match' && hit.object.userData.targetId) {
-                    const isHead = hit.object.userData.isHead;
-                    const dmg = isHead ? 45 : 15; // 헤드샷 가산 배율 차등 적용
-                    
-                    socket.emit('hitPlayer', {
-                        targetId: hit.object.userData.targetId,
-                        damage: dmg
-                    });
+                    // 고정된 데미지(6.7) 전송 -> 부위 상관없이 15발 관통 컷 규칙 적용
+                    socket.emit('hitPlayer', { targetId: hit.object.userData.targetId, damage: DAMAGE_PER_SHOT });
                 }
             }
 
-            // 내 화면에 소총 탄막 흔적 그리기
-            renderTracerEffect(startVec, endVec, 0xf59e0b);
-
-            // 실시간 다른 접속자들에게 내가 총을 쐈음을 서버로 릴레이
+            renderTracerTrail(startVec, endVec, 0xf59e0b);
             socket.emit('shoot', { start: startVec, end: endVec });
         }
 
-        function renderTracerEffect(start, end, colorHex) {
-            const mat = new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.7 });
+        function renderTracerTrail(start, end, color) {
+            const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
             const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
             const line = new THREE.Line(geo, mat);
             scene.add(line);
             setTimeout(() => { scene.remove(line); geo.dispose(); mat.dispose(); }, 50);
         }
 
-        // --- 루프 업데이트 연산 및 중력 가속도 물리 연산 (점프) ---
-        function updatePhysicsAndMovement() {
-            // 1. 🦘 중력 및 점프 물리 공식 연산 가동
+        function updateMainLoopAndPhysics() {
             if (!player.isGrounded) {
-                player.velocity.y -= GRAVITY; // 매 프레임 아래로 끌어내리는 가속도 낙하 적용
+                player.velocity.y -= GRAVITY; 
                 yawObject.position.y += player.velocity.y;
 
-                // 바닥 착지 타일 하한선 기준값 충돌 검사 제어
                 if (yawObject.position.y <= PLAYER_HEIGHT) {
                     yawObject.position.y = PLAYER_HEIGHT;
                     player.velocity.y = 0;
@@ -433,7 +431,6 @@
 
             if (!isLocked) return;
 
-            // 2. 키보드 수평 방향 벡터 무빙 이동 연산
             const moveDir = new THREE.Vector3();
             if (keys['KeyW']) moveDir.z -= 1;
             if (keys['KeyS']) moveDir.z += 1;
@@ -442,48 +439,65 @@
             moveDir.normalize();
 
             const rotatedDir = moveDir.clone().applyQuaternion(yawObject.quaternion);
-            rotatedDir.y = 0;
+            rotatedDir.y = 0; 
             rotatedDir.normalize();
-
             yawObject.position.addScaledVector(rotatedDir, PLAYER_SPEED);
 
-            // 구역 이탈 제한 벽면 충돌 박스 컬링
+            // 로비 및 발판 체크 로직
             if (gameMode === 'lobby') {
                 yawObject.position.x = Math.max(-14, Math.min(14, yawObject.position.x));
                 yawObject.position.z = Math.max(-14, Math.min(14, yawObject.position.z));
 
-                // 3. 밟았을 때 매칭 대기열 토글 진입 연산
-                const distToPad = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(myPad.position.x, myPad.position.z));
-                const isOnPad = distToPad < padRadius;
-                
-                // 로컬 상태와 서버 발판 동기화 상태가 다를 때 한번만 전송
-                if (isOnPad && !player.isReadyState) {
-                    player.isReadyState = true;
-                    socket.emit('toggleReady', true);
-                } else if (!isOnPad && player.isReadyState) {
-                    player.isReadyState = false;
-                    socket.emit('toggleReady', false);
+                // 3개 발판 중 어떤 발판 위에 서 있는지 실시간 체크
+                let standingPadId = null;
+                for (let i = 0; i < pads.length; i++) {
+                    const d = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(pads[i].x, pads[i].z));
+                    if (d < padRadius) {
+                        standingPadId = pads[i].id;
+                        break;
+                    }
                 }
+
+                // 발판 진입 및 이탈 통신 동기화
+                if (standingPadId !== activatedPadId) {
+                    if (activatedPadId !== null) {
+                        socket.emit('toggleReady', { padId: activatedPadId, isReady: false });
+                    }
+                    if (standingPadId !== null) {
+                        socket.emit('toggleReady', { padId: standingPadId, isReady: true });
+                    }
+                    activatedPadId = standingPadId;
+                }
+            } else {
+                // 아레나 맵 제한 영역
+                yawObject.position.x = Math.max(-18, Math.min(18, yawObject.position.x));
+                yawObject.position.z = Math.max(-53, Math.min(-17, yawObject.position.z));
             }
 
-            // 내 최신 위치 데이터를 매 프레임 실시간 노드로 중계 패킷 전송
-            socket.emit('playerMovement', {
-                pos: yawObject.position,
-                rotY: yawObject.rotation.y
-            });
+            socket.emit('playerMovement', { pos: yawObject.position, rotY: yawObject.rotation.y });
+        }
+
+        function updateVersusUI(myHp, enemyHp) {
+            if(myHp !== null) { 
+                const percentage = Math.ceil(myHp);
+                myHpBar.style.width = percentage + '%'; 
+                myHpText.innerText = `${percentage} HP`; 
+            }
+        }
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        function showResultAlert(msg, cssClass) {
+            const div = document.createElement('div');
+            div.className = `absolute top-1/3 left-1/2 -translate-x-1/2 bg-black/80 px-8 py-4 border border-white/20 text-3xl font-black rounded-2xl pointer-events-none z-50 animate-bounce ${cssClass}`;
+            div.innerText = msg;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 2500);
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            updatePhysicsAndMovement();
-            if (player.isShooting) fireActiveWeapon();
+            updateMainLoopAndPhysics();
+            if (player.isShooting) handleWeaponShooting();
             renderer.render(scene, camera);
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
         window.onload = () => { init(); animate(); };
