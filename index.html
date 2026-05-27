@@ -2,12 +2,12 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 멀티 룸 총게임</title>
+    <title>ONLINE FPS ARENA - 멀티플레이어 배틀</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; user-select: none; }
+        body { margin: 0; overflow: hidden; user-select: none; font-family: 'Pretendard', 'Noto Sans KR', sans-serif; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
         #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.9); }
         #crosshair::before { top: 4px; left: -5px; width: 20px; height: 2px; }
@@ -16,24 +16,50 @@
         .hit { background-color: rgba(239, 68, 68, 0.4); border: 15px solid rgba(239, 68, 68, 0.6); }
     </style>
 </head>
-<body class="bg-gray-900 text-white">
+<body class="bg-gray-950 text-white">
 
     <div id="damage-flash"></div>
 
     <div class="absolute top-0 left-0 w-full p-4 flex flex-col md:flex-row gap-4 justify-between items-center md:items-start pointer-events-none z-10">
-        <div class="bg-black/70 p-3 rounded-lg border border-gray-800">
-            <div class="text-xs text-gray-500 font-bold uppercase">구역</div>
+        <div class="bg-black/70 p-3 rounded-xl border border-gray-800 shadow-2xl">
+            <div class="text-xs text-gray-500 font-bold uppercase tracking-wider">구역</div>
+            <div id="game-status" class="text-xl font-black text-amber-400">대기실 (LOBBY)```html
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>ONLINE FPS ARENA - 멀티플레이어 배틀</title>
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <script src="[https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js](https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js)"></script>
+    <script src="[https://cdn.socket.io/4.7.2/socket.io.min.js](https://cdn.socket.io/4.7.2/socket.io.min.js)"></script>
+    <style>
+        body { margin: 0; overflow: hidden; user-select: none; font-family: 'Pretendard', 'Noto Sans KR', sans-serif; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.9); }
+        #crosshair::before { top: 4px; left: -5px; width: 20px; height: 2px; }
+        #crosshair::after { top: -5px; left: 4px; width: 2px; height: 20px; }
+        #damage-flash { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; transition: all 0.1s; z-index: 5; }
+        .hit { background-color: rgba(239, 68, 68, 0.4); border: 15px solid rgba(239, 68, 68, 0.6); }
+    </style>
+</head>
+<body class="bg-gray-950 text-white">
+
+    <div id="damage-flash"></div>
+
+    <div class="absolute top-0 left-0 w-full p-4 flex flex-col md:flex-row gap-4 justify-between items-center md:items-start pointer-events-none z-10">
+        <div class="bg-black/70 p-3 rounded-xl border border-gray-800 shadow-2xl">
+            <div class="text-xs text-gray-500 font-bold uppercase tracking-wider">구역</div>
             <div id="game-status" class="text-xl font-black text-amber-400">대기실 (LOBBY)</div>
         </div>
 
-        <div class="bg-black/70 p-3 rounded-lg border border-gray-800 text-center min-w-[200px]">
-            <div class="text-xs text-gray-400 font-bold uppercase">1v1 배틀 패드 상태</div>
-            <div id="pad-status-text" class="text-lg font-black text-green-400">대기 중 (0 / 2)</div>
+        <div class="bg-black/70 p-3 rounded-xl border border-gray-800 text-center min-w-[200px] shadow-2xl">
+            <div class="text-xs text-gray-400 font-bold uppercase tracking-wider">1v1 배틀 패드 상태</div>
+            <div id="pad-status-text" class="text-lg font-black text-green-400 animate-pulse">대기 중 (0 / 2)</div>
             <div class="text-[10px] text-gray-500">노란 발판 위로 올라가면 매칭이 수락됩니다.</div>
         </div>
 
-        <div class="bg-black/70 p-3 rounded-lg border border-gray-800 text-right">
-            <div class="text-xs text-gray-500 font-bold">내 전적</div>
+        <div class="bg-black/70 p-3 rounded-xl border border-gray-800 text-right shadow-2xl">
+            <div class="text-xs text-gray-500 font-bold tracking-wider">내 전적</div>
             <div class="text-xl font-black text-white"><span id="score-win" class="text-green-400">0</span>승 <span id="score-lose" class="text-red-400">0</span>패</div>
         </div>
     </div>
@@ -41,12 +67,12 @@
     <div id="crosshair"></div>
 
     <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 pointer-events-none z-10 flex flex-col gap-3">
-        <div id="hp-versus-container" class="flex justify-between items-center bg-black/70 p-3 rounded-xl border border-white/10 opacity-0 transition-opacity">
+        <div id="hp-versus-container" class="flex justify-between items-center bg-black/70 p-3 rounded-2xl border border-white/10 opacity-0 transition-opacity duration-300">
             <div class="w-2/5">
                 <div class="flex justify-between text-xs font-bold mb-1"><span class="text-blue-400">나</span> <span id="my-hp-text">100 HP</span></div>
                 <div class="w-full bg-gray-800 h-3 rounded-full overflow-hidden"><div id="my-hp-bar" class="bg-blue-500 h-full w-full"></div></div>
             </div>
-            <div class="font-black italic text-rose-500 text-xl">VS</div>
+            <div class="font-black italic text-rose-500 text-2xl tracking-tighter">VS</div>
             <div class="w-2/5 text-right">
                 <div class="flex justify-between text-xs font-bold mb-1 flex-row-reverse"><span class="text-red-400">상대</span> <span id="enemy-hp-text">100 HP</span></div>
                 <div class="w-full bg-gray-800 h-3 rounded-full overflow-hidden"><div id="enemy-hp-bar" class="bg-red-500 h-full w-full float-right"></div></div>
@@ -55,18 +81,18 @@
 
         <div class="flex justify-between items-end">
             <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300">
-                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | 독립 게임 룸 매칭 (최대 8개 룸 활성화)
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | <span class="text-amber-400 font-bold">클릭</span>: 사격
             </div>
-            <div class="bg-black/90 px-6 py-3 rounded-xl border border-amber-500 flex items-center gap-4">
-                <div class="text-right text-3xl font-black text-amber-400"><span id="current-ammo">30</span>/30</div>
-                <div class="text-[11px] text-gray-400 font-bold uppercase">RIFLE M4A1</div>
+            <div class="bg-black/90 px-6 py-3 rounded-xl border-2 border-amber-500 flex items-center gap-4 shadow-inner">
+                <div class="text-right text-4xl font-black text-amber-400 tabular-nums"><span id="current-ammo">30</span>/30</div>
+                <div class="text-[11px] text-gray-400 font-bold uppercase tracking-widest">RIFLE M4A1</div>
             </div>
         </div>
     </div>
 
-    <div id="intro-modal" class="absolute top-0 left-0 w-full h-full bg-black/95 flex flex-col justify-center items-center z-50 transition-opacity">
-        <h1 class="text-4xl font-black text-amber-500 mb-6 tracking-wider">ONLINE FPS ARENA</h1>
-        <button id="start-btn" class="bg-amber-500 hover:bg-amber-600 text-black font-extrabold py-4 px-8 rounded-xl text-lg transition-transform active:scale-95 pointer-events-auto">
+    <div id="intro-modal" class="absolute top-0 left-0 w-full h-full bg-black/95 flex flex-col justify-center items-center z-50 transition-opacity duration-500">
+        <h1 class="text-5xl font-black text-amber-500 mb-8 tracking-wider">ONLINE FPS ARENA</h1>
+        <button id="start-btn" class="bg-amber-500 hover:bg-amber-600 text-black font-extrabold py-4 px-10 rounded-2xl text-xl transition-all active:scale-95 pointer-events-auto shadow-lg">
             게임 서버 접속하기
         </button>
     </div>
@@ -74,14 +100,14 @@
     <div id="canvas-container"></div>
 
     <script>
-        // ⚠️ 내 진짜 렌더 서버 주소가 맞는지 꼭 확인하세요!
-        const socket = io('https://online-fps-server.onrender.com'); 
+        // ⚠️ 내 진짜 렌더 서버 주소가 맞는지 확인하세요!
+        const socket = io('[https://online-fps-server.onrender.com](https://online-fps-server.onrender.com)'); 
 
         const PLAYER_SPEED = 0.12;
         const JUMP_FORCE = 0.08;
         const GRAVITY = 0.0035;
         const PLAYER_HEIGHT = 1.6;
-        const DAMAGE_PER_SHOT = 6.7; 
+        const DAMAGE_PER_SHOT = 6.7; // 15방 수명용 데미지 설정
 
         let scene, camera, renderer;
         let keys = {};
@@ -89,10 +115,10 @@
         
         let padMesh;
         const padRadius = 2.0;
-        const padPos = { x: 0, z: 4 }; 
+        const padPos = { x: 0, z: 4 }; // 단일 매칭 발판 위치
         
         let gameMode = 'lobby'; 
-        let currentRoomId = null; // 내가 소속된 방의 ID ('room_1' ~ 'room_8')
+        let currentRoomId = null;
         let myRole = null;
         let opponentId = null;
         let isPlayerReady = false;
@@ -107,7 +133,7 @@
             isGrounded: true,
             isShooting: false,
             lastShotTime: 0,
-            shootDelay: 120
+            shootDelay: 100 // 연사 속도 살짝 상향
         };
 
         let gunModel;
@@ -129,10 +155,13 @@
         const scoreLoseEl = document.getElementById('score-lose');
         const padStatusTextEl = document.getElementById('pad-status-text');
 
+        // 구조물 목록 관리를 위한 배열
+        let obstacles = [];
+
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0f172a);
-            scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
+            scene.background = new THREE.Color(0x0f172a); // 깊은 네이비 배경
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.012); // 안개 효과 상향
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             pitchObject.add(camera);
@@ -142,13 +171,24 @@
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.enabled = true; // 그림자 활성화
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 부드러운 그림자
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            // 조명 설정 업그레이드
+            scene.add(new THREE.AmbientLight(0x404040, 0.6)); // 따뜻한 환경광
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
             dirLight.position.set(10, 30, 10);
+            dirLight.castShadow = true; // 그림자 생성 광원
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
             scene.add(dirLight);
+
+            // 대기실에 분위기 있는 호박색 포인트 조명 추가
+            const lobbyLight = new THREE.PointLight(0xf59e0b, 1, 15);
+            lobbyLight.position.set(0, 4, 10);
+            scene.add(lobbyLight);
 
             buildLobbyAndArena();
             createPlayerGun();
@@ -166,7 +206,7 @@
             startBtn.addEventListener('click', () => {
                 document.body.requestPointerLock();
                 introModal.style.opacity = '0';
-                setTimeout(() => introModal.style.display = 'none', 300);
+                setTimeout(() => introModal.style.display = 'none', 500);
             });
         }
 
@@ -183,14 +223,12 @@
                 if (otherPlayers[playerInfo.id]) {
                     otherPlayers[playerInfo.id].position.copy(playerInfo.pos);
                     otherPlayers[playerInfo.id].rotation.y = playerInfo.rotY;
-                    otherPlayers[playerInfo.id].visible = true; 
-                } else {
-                    // 게임 도중 초기화되어 맵에 없는 상대가 뒤늦게 패킷을 보낼 때 대비
-                    spawnOtherPlayerMesh(playerInfo.id, playerInfo.pos);
                 }
             });
 
-            socket.on('readyStatusUpdate', (count) => {
+            socket.on('readyStatusUpdate', (statusData) => {
+                // 단일 패드 서버 데이터 형식에 맞춰 업데이트
+                const count = typeof statusData === 'object' ? (statusData['A'] || 0) : statusData;
                 if (count > 0) {
                     padStatusTextEl.innerText = `매칭 중 (${count} / 2)`;
                     padStatusTextEl.className = "text-lg font-black text-amber-400 animate-pulse";
@@ -200,26 +238,13 @@
                 }
             });
 
-            // ❌ 8개 방이 풀가동 중일 때 발생하는 서버 정원 초과 에러 이벤트 핸들링
-            socket.on('serverFullError', () => {
-                isPlayerReady = false;
-                showResultAlert("🚨 서버 정원 초과! 모든 방이 플레이 중입니다.", "text-orange-500 bg-black/90 border-orange-500");
-                // 플레이어를 강제로 발판 바깥으로 튕겨냄 (안전조치)
-                yawObject.position.set(0, PLAYER_HEIGHT, 12); 
-            });
-
             socket.on('matchFound', (data) => {
                 currentRoomId = data.roomId;
                 myRole = data.role;
                 opponentId = data.opponentId;
                 gameMode = 'match';
 
-                // 아레나 입장 전 맵에 남아있던 다른 로비 유저들을 내 화면에서 전부 숨김처리 (격리)
-                Object.keys(otherPlayers).forEach(id => {
-                    if (id !== opponentId) otherPlayers[id].visible = false;
-                });
-
-                gameStatusEl.innerText = `아레나 (BATTLE AREA)`;
+                gameStatusEl.innerText = `배틀 아레나 (BATTLE ARENA)`;
                 gameStatusEl.className = "text-xl font-black text-rose-500 animate-pulse";
                 versusContainer.classList.remove('opacity-0');
 
@@ -253,7 +278,7 @@
                 setTimeout(() => damageFlashEl.className = '', 100);
 
                 if (player.hp <= 0) {
-                    socket.emit('matchOver', { roomId: currentRoomId, winnerId: opponentId, loserId: socket.id });
+                    socket.emit('matchOver', { winnerId: opponentId, loserId: socket.id });
                 }
             });
 
@@ -269,10 +294,6 @@
                 gameStatusEl.innerText = "대기실 (LOBBY)";
                 gameStatusEl.className = "text-xl font-black text-amber-400";
                 
-                // 화면의 모든 적 메시들 청소 후 재생성 프로세스 대비
-                Object.keys(otherPlayers).forEach(id => { scene.remove(otherPlayers[id]); });
-                otherPlayers = {};
-
                 if(result === 'win') {
                     scoreWinEl.innerText = parseInt(scoreWinEl.innerText) + 1;
                     showResultAlert("👑 대결 승리!", "text-green-400");
@@ -281,13 +302,8 @@
                     showResultAlert("💀 대결 패배...", "text-red-400");
                 }
 
-                // 로비 리스폰 위치 세팅
                 yawObject.position.set((Math.random() - 0.5) * 5, PLAYER_HEIGHT, 12);
                 yawObject.rotation.set(0, 0, 0);
-                
-                currentRoomId = null;
-                opponentId = null;
-                myRole = null;
                 isPlayerReady = false;
             });
 
@@ -300,56 +316,111 @@
         }
 
         function buildLobbyAndArena() {
-            const lobbyFloorMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            // 🌈 컬러풀한 재질 정의
+            const lobbyFloorMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.9 }); // 짙은 회색 로비 바닥
+            const arenaFloorMat = new THREE.MeshStandardMaterial({ color: 0x2e1065, roughness: 0.7, metalness: 0.2 }); // 보랏빛 아레나 바닥
+
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x475569 }); // 벽 재질
+
+            // 구조물 재질 목록 (다양한 색상)
+            const obsMaterials = [
+                new THREE.MeshStandardMaterial({ color: 0x06b6d4, emissive: 0x06b6d4, emissiveIntensity: 0.15 }), // 하늘색 LED 박스
+                new THREE.MeshStandardMaterial({ color: 0xec4899 }), // 핑크색 구조물
+                new THREE.MeshStandardMaterial({ color: 0x84cc16 }), // 연두색 구조물
+                new THREE.MeshStandardMaterial({ color: 0xfacc15 })  // 노란색 구조물
+            ];
+
+            // 대기실 바닥
             const lobbyFloor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), lobbyFloorMat);
             lobbyFloor.rotation.x = -Math.PI / 2;
+            lobbyFloor.receiveShadow = true;
             scene.add(lobbyFloor);
 
-            const arenaFloorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 });
-            const arenaFloor = new THREE.Mesh(new THREE.BoxGeometry(40, 1, 40), arenaFloorMat);
+            // 전투 아레나 바닥 (크기 확대)
+            const arenaFloor = new THREE.Mesh(new THREE.BoxGeometry(45, 1, 45), arenaFloorMat);
             arenaFloor.position.set(0, -0.5, -35);
+            arenaFloor.receiveShadow = true;
             scene.add(arenaFloor);
 
-            const obsMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
-            const obs = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), obsMat);
-            obs.position.set(0, 3, -35);
-            scene.add(obs);
+            // 아레나 가장자리 네온 LED 스트립 추가
+            const neonGeo = new THREE.BoxGeometry(45, 0.1, 0.1);
+            const neonMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 1 });
+            const neon1 = new THREE.Mesh(neonGeo, neonMat);
+            neon1.position.set(0, 0.05, -12.5);
+            scene.add(neon1);
+            const neon2 = new THREE.Mesh(neonGeo, neonMat);
+            neon2.position.set(0, 0.05, -57.5);
+            scene.add(neon2);
 
+            // 🌟 아레나 지형지물 구조물 추가 배치
+            const obsConfigs = [
+                // p1 진영 근처
+                { size: [3, 4, 3], pos: [-8, 2, -20], matIdx: 1 }, // 엄폐벽
+                { size: [3, 2, 8], pos: [8, 1, -25], matIdx: 2 },  // 긴 낮은 벽
+
+                // p2 진영 근처
+                { size: [3, 4, 3], pos: [8, 2, -50], matIdx: 1 }, // 엄폐벽
+                { size: [3, 2, 8], pos: [-8, 1, -45], matIdx: 3 }, // 긴 낮은 벽
+
+                // 중앙 지역 전략 구조물
+                { size: [1.5, 6, 1.5], pos: [-12, 3, -35], matIdx: 0 }, // 높은 기둥
+                { size: [1.5, 6, 1.5], pos: [12, 3, -35], matIdx: 0 },  // 높은 기둥
+                { size: [6, 1, 6], pos: [0, 0.5, -35], matIdx: 0 },     // 중앙 거점 플랫폼 (살짝 높음)
+                { size: [2, 3, 2], pos: [0, 2.5, -35], matIdx: 1 }      // 플랫폼 위 엄폐 박스
+            ];
+
+            obsConfigs.forEach(config => {
+                const geometry = new THREE.BoxGeometry(config.size[0], config.size[1], config.size[2]);
+                const material = obsMaterials[config.matIdx].clone(); // 색상 재질 적용
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(config.pos[0], config.pos[1], config.pos[2]);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                
+                // 충돌 처리 정보 저장
+                mesh.userData = {
+                    width: config.size[0],
+                    height: config.size[1],
+                    depth: config.size[2]
+                };
+                
+                scene.add(mesh);
+                obstacles.push(mesh); // 충돌 목록에 추가
+            });
+
+            // 오리지널 노란색 배틀 패드 1개 배치
             padMesh = new THREE.Mesh(
                 new THREE.CylinderGeometry(padRadius, padRadius, 0.1, 32),
-                new THREE.MeshStandardMaterial({ color: 0xeab308, emissive: 0xeab308, emissiveIntensity: 0.4 })
+                new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 0.5 })
             );
             padMesh.position.set(padPos.x, 0.05, padPos.z);
             scene.add(padMesh);
         }
 
         function spawnOtherPlayerMesh(id, pos) {
-            if (otherPlayers[id]) return;
-
             const group = new THREE.Group();
+            // 상대방 몸통 색상을 좀 더 선명하게 변경
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 0.6), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
             body.position.y = 0.9;
+            body.castShadow = true;
             group.add(body);
+            // 머리는 노란색 헬멧 느낌
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
             head.position.y = 2.1;
+            head.castShadow = true;
             group.add(head);
 
             body.userData = { targetId: id };
             head.userData = { targetId: id };
             group.position.copy(pos);
-            
-            // 만약 내가 게임 중인데 엉뚱한 로비 유저가 접속했다면 숨김 상태로 스폰
-            if (gameMode === 'match' && id !== opponentId) {
-                group.visible = false;
-            }
-
             scene.add(group);
             otherPlayers[id] = group;
         }
 
         function createPlayerGun() {
             gunModel = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 1.0), new THREE.MeshStandardMaterial({ color: 0x334155 }));
+            // 총기 색상을 메탈릭한 스틸 느낌으로
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 1.0), new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 }));
             gunModel.add(body);
             gunModel.position.set(0.25, -0.2, -0.4); 
             camera.add(gunModel);
@@ -368,14 +439,14 @@
         function onKeyUp(e) { keys[e.code] = false; }
         function onMouseMove(e) {
             if (!isLocked) return;
-            yawObject.rotation.y -= e.movementX * 0.0022;
-            pitchObject.rotation.x -= e.movementY * 0.0022;
+            yawObject.rotation.y -= e.movementX * 0.002; // 감도 미세 조정
+            pitchObject.rotation.x -= e.movementY * 0.002;
             pitchObject.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchObject.rotation.x));
         }
 
         function reloadPlayerWeapon() {
             player.isReloading = true;
-            currentAmmoEl.innerText = "RELOAD";
+            currentAmmoEl.innerText = "장전";
             currentAmmoEl.classList.add('animate-pulse', 'text-amber-300');
             setTimeout(() => {
                 player.ammo = player.maxAmmo;
@@ -400,48 +471,52 @@
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
-            const startVec = new THREE.Vector3(0.15, -0.15, -0.4).unproject(camera);
+            // 총구 위치 오프셋 세정
+            const startVec = new THREE.Vector3(0.25, -0.15, -0.9).unproject(camera);
             let endVec = new THREE.Vector3();
             raycaster.ray.at(100, endVec);
 
-            // 내 화면에 렌더링된 메시들 중 '현재 보이고 있는(visible)' 타겟만 맞출 수 있도록 필터링 (완벽 방 격리)
+            // 레이캐스팅 타겟 목록 통합 (상대 플레이어 메시들)
             const targetMeshes = [];
-            Object.values(otherPlayers).forEach(p => {
-                if (p.visible) {
-                    p.traverse(c => { if(c.isMesh) targetMeshes.push(c); });
-                }
-            });
+            Object.values(otherPlayers).forEach(p => p.traverse(c => { if(c.isMesh) targetMeshes.push(c); }));
+            
+            // 구조물도 타겟 목록에 추가 (총알이 벽에 박히는 효과 표현용)
+            obstacles.forEach(obs => targetMeshes.push(obs));
 
             const intersects = raycaster.intersectObjects(targetMeshes);
             if (intersects.length > 0) {
                 const hit = intersects[0];
                 endVec.copy(hit.point);
 
-                if (gameMode === 'match' && hit.object.userData.targetId === opponentId) {
-                    socket.emit('hitPlayer', { roomId: currentRoomId, targetId: hit.object.userData.targetId, damage: DAMAGE_PER_SHOT });
+                // 🎯 디버깅 포인트: 맞춘 대상이 플레이어인지 확인
+                if (gameMode === 'match' && hit.object.userData.targetId) {
+                    // 고정 데미지(6.7) 전송 -> 15방 수명 규칙
+                    socket.emit('hitPlayer', { targetId: hit.object.userData.targetId, damage: DAMAGE_PER_SHOT });
                 }
             }
 
-            renderTracerTrail(startVec, endVec, 0xf59e0b);
-            // 총 궤적 패킷을 보낼 때 내 Room ID도 같이 실어서 보안 격리 통신
-            socket.emit('shoot', { roomId: currentRoomId, start: startVec, end: endVec });
+            renderTracerTrail(startVec, endVec, 0xfacc15); // 노란색 총 궤적
+            socket.emit('shoot', { start: startVec, end: endVec });
         }
 
         function renderTracerTrail(start, end, color) {
-            const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+            const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 });
             const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
             const line = new THREE.Line(geo, mat);
             scene.add(line);
-            setTimeout(() => { scene.remove(line); geo.dispose(); mat.dispose(); }, 50);
+            setTimeout(() => { scene.remove(line); geo.dispose(); mat.dispose(); }, 40); // 궤적 지속 시간 단축
         }
 
         function updateMainLoopAndPhysics() {
+            // 중력 및 점프 물리 엔진
             if (!player.isGrounded) {
                 player.velocity.y -= GRAVITY; 
                 yawObject.position.y += player.velocity.y;
 
-                if (yawObject.position.y <= PLAYER_HEIGHT) {
-                    yawObject.position.y = PLAYER_HEIGHT;
+                // 기본 바닥 충돌 처리
+                const floorY = gameMode === 'match' ? 0 : 0; // 로비/아레나 바닥 높이 통일
+                if (yawObject.position.y <= PLAYER_HEIGHT + floorY) {
+                    yawObject.position.y = PLAYER_HEIGHT + floorY;
                     player.velocity.y = 0;
                     player.isGrounded = true;
                 }
@@ -449,6 +524,7 @@
 
             if (!isLocked) return;
 
+            // 이동 방향 벡터 계산
             const moveDir = new THREE.Vector3();
             if (keys['KeyW']) moveDir.z -= 1;
             if (keys['KeyS']) moveDir.z += 1;
@@ -456,38 +532,73 @@
             if (keys['KeyD']) moveDir.x += 1;
             moveDir.normalize();
 
+            // 플레이어 시선 방향으로 이동 벡터 회전
             const rotatedDir = moveDir.clone().applyQuaternion(yawObject.quaternion);
-            rotatedDir.y = 0; 
+            rotatedDir.y = 0; // 수직 이동 차단
             rotatedDir.normalize();
             yawObject.position.addScaledVector(rotatedDir, PLAYER_SPEED);
 
+            // 🌟 벽 및 구조물 충돌 감지 (AABB 방식)
+            if (gameMode === 'match') {
+                obstacles.forEach(obs => {
+                    const obsPos = obs.position;
+                    const obsSize = obs.userData;
+                    const playerPos = yawObject.position;
+                    const playerRadius = 0.5; // 플레이어 충돌 반경
+
+                    // X축 충돌 체크
+                    const dx = Math.abs(playerPos.x - obsPos.x);
+                    if (dx < (obsSize.width / 2 + playerRadius)) {
+                        // Z축 충돌 체크
+                        const dz = Math.abs(playerPos.z - obsPos.z);
+                        if (dz < (obsSize.depth / 2 + playerRadius)) {
+                            // 충돌 발생 시 가장 가까운 면으로 밀어내기
+                            const pushX = (obsSize.width / 2 + playerRadius) - dx;
+                            const pushZ = (obsSize.depth / 2 + playerRadius) - dz;
+
+                            if (pushX < pushZ) {
+                                yawObject.position.x += (playerPos.x > obsPos.x ? pushX : -pushX);
+                            } else {
+                                yawObject.position.z += (playerPos.z > obsPos.z ? pushZ : -pushZ);
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 구역 제한 로직
             if (gameMode === 'lobby') {
+                // 로비 월드 제한
                 yawObject.position.x = Math.max(-14, Math.min(14, yawObject.position.x));
                 yawObject.position.z = Math.max(-14, Math.min(14, yawObject.position.z));
 
+                // 단일 매칭 패드 밟았는지 실시간 체크 및 서버 전송
                 const distToPad = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(padPos.x, padPos.z));
                 const standingOnPad = (distToPad < padRadius);
 
                 if (standingOnPad !== isPlayerReady) {
                     isPlayerReady = standingOnPad;
-                    socket.emit('toggleReady', { isReady: isPlayerReady });
+                    socket.emit('toggleReady', { padId: 'A', isReady: isPlayerReady });
                 }
             } else {
-                yawObject.position.x = Math.max(-18, Math.min(18, yawObject.position.x));
-                yawObject.position.z = Math.max(-53, Math.min(-17, yawObject.position.z));
+                // 아레나 월드 제한 (크기 확대에 따라 조정)
+                yawObject.position.x = Math.max(-21, Math.min(21, yawObject.position.x));
+                yawObject.position.z = Math.max(-56, Math.min(-14, yawObject.position.z));
             }
 
-            // 패킷을 보낼 때 내가 어느 방(로비면 null)에 있는지 실시간으로 동봉하여 전송
-            socket.emit('playerMovement', { roomId: currentRoomId, pos: yawObject.position, rotY: yawObject.rotation.y });
+            // 서버에 내 위치 및 회전 정보 전송
+            socket.emit('playerMovement', { pos: yawObject.position, rotY: yawObject.rotation.y });
         }
 
         function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        
+        // 결과 알림창 업그레이드 (색상 및 애니메이션 추가)
         function showResultAlert(msg, cssClass) {
             const div = document.createElement('div');
-            div.className = `absolute top-1/3 left-1/2 -translate-x-1/2 bg-black/80 px-8 py-4 border border-white/20 text-2xl font-black rounded-2xl pointer-events-none z-50 animate-bounce ${cssClass}`;
+            div.className = `absolute top-1/3 left-1/2 -translate-x-1/2 bg-black/80 px-10 py-5 border border-white/20 text-3xl font-black rounded-2xl pointer-events-none z-50 animate-bounce ${cssClass}`;
             div.innerText = msg;
             document.body.appendChild(div);
-            setTimeout(() => div.remove(), 3500);
+            setTimeout(() => div.remove(), 2500);
         }
 
         function animate() {
