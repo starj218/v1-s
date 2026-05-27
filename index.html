@@ -22,20 +22,14 @@
 
     <div class="absolute top-0 left-0 w-full p-4 flex flex-col md:flex-row gap-4 justify-between items-center md:items-start pointer-events-none z-10">
         <div class="bg-black/70 p-3 rounded-lg border border-gray-800">
-            <div class="text-xs text-gray-500 font-bold uppercase">상태</div>
+            <div class="text-xs text-gray-500 font-bold uppercase">구역</div>
             <div id="game-status" class="text-xl font-black text-amber-400">대기실 (LOBBY)</div>
         </div>
 
-        <div class="bg-black/80 p-3 rounded-xl border border-gray-800 grid grid-cols-3 gap-x-6 gap-y-2 text-center shadow-2xl min-w-[320px]">
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-amber-400 font-bold">PAD A</span><span id="pad-A-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-purple-400 font-bold">PAD B</span><span id="pad-B-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-cyan-400 font-bold">PAD C</span><span id="pad-C-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-lime-400 font-bold">PAD D</span><span id="pad-D-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-pink-400 font-bold">PAD E</span><span id="pad-E-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-yellow-300 font-bold">PAD F</span><span id="pad-F-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-emerald-400 font-bold">PAD G</span><span id="pad-G-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-blue-400 font-bold">PAD H</span><span id="pad-H-text" class="text-sm font-black">0 / 2</span></div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[11px] text-rose-500 font-bold">PAD I</span><span id="pad-I-text" class="text-sm font-black">0 / 2</span></div>
+        <div class="bg-black/70 p-3 rounded-lg border border-gray-800 text-center min-w-[200px]">
+            <div class="text-xs text-gray-400 font-bold uppercase">1v1 배틀 패드 상태</div>
+            <div id="pad-status-text" class="text-lg font-black text-green-400 animate-pulse">대기 중 (0 / 2)</div>
+            <div class="text-[10px] text-gray-500">노란 발판 위로 올라가면 매칭이 수락됩니다.</div>
         </div>
 
         <div class="bg-black/70 p-3 rounded-lg border border-gray-800 text-right">
@@ -61,11 +55,11 @@
 
         <div class="flex justify-between items-end">
             <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300">
-                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | 아무 컬러 발판에 올라가 매칭 대기 (15방 룰)
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | <span class="text-amber-400 font-bold">클릭</span>: 연사 사격
             </div>
             <div class="bg-black/90 px-6 py-3 rounded-xl border border-amber-500 flex items-center gap-4">
                 <div class="text-right text-3xl font-black text-amber-400"><span id="current-ammo">30</span>/30</div>
-                <div class="text-[11px] text-gray-400 font-bold uppercase">AMMO</div>
+                <div class="text-[11px] text-gray-400 font-bold uppercase">RIFLE M4A1</div>
             </div>
         </div>
     </div>
@@ -80,27 +74,28 @@
     <div id="canvas-container"></div>
 
     <script>
-        // ⚠️ 내 진짜 렌더 서버 주소 입력 확인!
+        // ⚠️ 내 진짜 렌더 서버 주소가 맞는지 확인하세요!
         const socket = io('https://online-fps-server.onrender.com'); 
 
         const PLAYER_SPEED = 0.12;
         const JUMP_FORCE = 0.08;
         const GRAVITY = 0.0035;
         const PLAYER_HEIGHT = 1.6;
-        const DAMAGE_PER_SHOT = 6.7; // 15방 수명용 데미지
+        const DAMAGE_PER_SHOT = 6.7; 
 
         let scene, camera, renderer;
         let keys = {};
         let otherPlayers = {}; 
         
-        let pads = [];
-        const padRadius = 1.6;
+        let padMesh;
+        const padRadius = 2.0;
+        const padPos = { x: 0, z: 4 }; // 기존 단일 노란색 발판 위치
         
         let gameMode = 'lobby'; 
         let currentRoomId = null;
         let myRole = null;
         let opponentId = null;
-        let activatedPadId = null; 
+        let isPlayerReady = false;
 
         let player = {
             hp: 100,
@@ -132,6 +127,7 @@
         const damageFlashEl = document.getElementById('damage-flash');
         const scoreWinEl = document.getElementById('score-win');
         const scoreLoseEl = document.getElementById('score-lose');
+        const padStatusTextEl = document.getElementById('pad-status-text');
 
         function init() {
             scene = new THREE.Scene();
@@ -190,14 +186,17 @@
                 }
             });
 
+            // 단일 패드 서버용 이벤트 갱신 동기화
             socket.on('readyStatusUpdate', (statusData) => {
-                Object.keys(statusData).forEach(padId => {
-                    const el = document.getElementById(`pad-${padId}-text`);
-                    if (el) {
-                        el.innerText = `${statusData[padId]} / 2`;
-                        el.className = statusData[padId] > 0 ? "text-sm font-black text-green-400" : "text-sm font-black text-white";
-                    }
-                });
+                // 기존 단일 패드 서버가 보내주는 형식('A' 데이터가 아닐 경우 처리 포함)
+                const count = typeof statusData === 'object' ? (statusData['A'] || 0) : statusData;
+                if (count > 0) {
+                    padStatusTextEl.innerText = `매칭 중 (${count} / 2)`;
+                    padStatusTextEl.className = "text-lg font-black text-amber-400 animate-pulse";
+                } else {
+                    padStatusTextEl.innerText = `대기 중 (0 / 2)`;
+                    padStatusTextEl.className = "text-lg font-black text-green-400";
+                }
             });
 
             socket.on('matchFound', (data) => {
@@ -206,7 +205,7 @@
                 opponentId = data.opponentId;
                 gameMode = 'match';
 
-                gameStatusEl.innerText = `아레나 MATCH [패드 ${data.padId}]`;
+                gameStatusEl.innerText = `아레나 (BATTLE ARENA)`;
                 gameStatusEl.className = "text-xl font-black text-rose-500 animate-pulse";
                 versusContainer.classList.remove('opacity-0');
 
@@ -222,7 +221,6 @@
                 player.ammo = player.maxAmmo;
                 currentAmmoEl.innerText = player.ammo;
                 
-                // 맵 로딩 시 둘 다 풀피(100)로 갱신
                 myHpBar.style.width = '100%';
                 myHpText.innerText = '100 HP';
                 enemyHpBar.style.width = '100%';
@@ -231,7 +229,6 @@
 
             socket.on('opponentShoot', (data) => { renderTracerTrail(data.start, data.end, 0xef4444); });
 
-            // 🎯 내 피가 까졌을 때 이벤트 수신
             socket.on('damaged', (data) => {
                 player.hp = data.currentHp;
                 const percentage = Math.ceil(player.hp);
@@ -246,7 +243,6 @@
                 }
             });
 
-            // 🎯 상대방 피가 까졌을 때 수신하여 내 화면 오른쪽 바 갱신!
             socket.on('updateEnemyHP', (data) => {
                 const percentage = Math.ceil(data.enemyHp);
                 enemyHpBar.style.width = percentage + '%';
@@ -269,7 +265,7 @@
 
                 yawObject.position.set((Math.random() - 0.5) * 5, PLAYER_HEIGHT, 12);
                 yawObject.rotation.set(0, 0, 0);
-                activatedPadId = null;
+                isPlayerReady = false;
             });
 
             socket.on('playerDisconnected', (id) => {
@@ -296,27 +292,13 @@
             obs.position.set(0, 3, -35);
             scene.add(obs);
 
-            const padConfigs = [
-                { id: 'A', x: -6, z: 4, color: 0xf59e0b },  
-                { id: 'B', x: 0, z: 4, color: 0xa855f7 },   
-                { id: 'C', x: 6, z: 4, color: 0x06b6d4 },   
-                { id: 'D', x: -6, z: 8, color: 0x84cc16 },  
-                { id: 'E', x: 0, z: 8, color: 0xec4899 },   
-                { id: 'F', x: 6, z: 8, color: 0xeab308 },   
-                { id: 'G', x: -6, z: 12, color: 0x10b981 }, 
-                { id: 'H', x: 0, z: 12, color: 0x3b82f6 },  
-                { id: 'I', x: 6, z: 12, color: 0xef4444 }   
-            ];
-
-            padConfigs.forEach(config => {
-                const padMesh = new THREE.Mesh(
-                    new THREE.CylinderGeometry(padRadius, padRadius, 0.1, 32),
-                    new THREE.MeshStandardMaterial({ color: config.color, emissive: config.color, emissiveIntensity: 0.35 })
-                );
-                padMesh.position.set(config.x, 0.05, config.z);
-                scene.add(padMesh);
-                pads.push({ id: config.id, x: config.x, z: config.z });
-            });
+            // 오리지널 노란색 배틀 패드 1개 배치
+            padMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(padRadius, padRadius, 0.1, 32),
+                new THREE.MeshStandardMaterial({ color: 0xeab308, emissive: 0xeab308, emissiveIntensity: 0.4 })
+            );
+            padMesh.position.set(padPos.x, 0.05, padPos.z);
+            scene.add(padMesh);
         }
 
         function spawnOtherPlayerMesh(id, pos) {
@@ -363,7 +345,7 @@
 
         function reloadPlayerWeapon() {
             player.isReloading = true;
-            currentAmmoEl.innerText = "장전 중";
+            currentAmmoEl.innerText = "RELOAD";
             currentAmmoEl.classList.add('animate-pulse', 'text-amber-300');
             setTimeout(() => {
                 player.ammo = player.maxAmmo;
@@ -447,19 +429,14 @@
                 yawObject.position.x = Math.max(-14, Math.min(14, yawObject.position.x));
                 yawObject.position.z = Math.max(-14, Math.min(14, yawObject.position.z));
 
-                let standingPadId = null;
-                for (let i = 0; i < pads.length; i++) {
-                    const d = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(pads[i].x, pads[i].z));
-                    if (d < padRadius) {
-                        standingPadId = pads[i].id;
-                        break;
-                    }
-                }
+                // 단일 패드 밟았는지 실시간 체크 및 서버 전송
+                const distToPad = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(padPos.x, padPos.z));
+                const standingOnPad = (distToPad < padRadius);
 
-                if (standingPadId !== activatedPadId) {
-                    if (activatedPadId !== null) socket.emit('toggleReady', { padId: activatedPadId, isReady: false });
-                    if (standingPadId !== null) socket.emit('toggleReady', { padId: standingPadId, isReady: true });
-                    activatedPadId = standingPadId;
+                if (standingOnPad !== isPlayerReady) {
+                    isPlayerReady = standingOnPad;
+                    // 서버가 단일 패드 매칭(`padId: 'A'`) 형식으로 작동하도록 맞춰 전송
+                    socket.emit('toggleReady', { padId: 'A', isReady: isPlayerReady });
                 }
             } else {
                 yawObject.position.x = Math.max(-18, Math.min(18, yawObject.position.x));
