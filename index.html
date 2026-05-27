@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 온라인 총게임</title>
+    <title>ONLINE FPS ARENA - 멀티 룸 총게임</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -28,7 +28,7 @@
 
         <div class="bg-black/70 p-3 rounded-lg border border-gray-800 text-center min-w-[200px]">
             <div class="text-xs text-gray-400 font-bold uppercase">1v1 배틀 패드 상태</div>
-            <div id="pad-status-text" class="text-lg font-black text-green-400 animate-pulse">대기 중 (0 / 2)</div>
+            <div id="pad-status-text" class="text-lg font-black text-green-400">대기 중 (0 / 2)</div>
             <div class="text-[10px] text-gray-500">노란 발판 위로 올라가면 매칭이 수락됩니다.</div>
         </div>
 
@@ -55,7 +55,7 @@
 
         <div class="flex justify-between items-end">
             <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300">
-                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | <span class="text-amber-400 font-bold">클릭</span>: 연사 사격
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">SPACE</span>: 점프 | <span class="text-amber-400 font-bold">R</span>: 장전 | 독립 게임 룸 매칭 (최대 8개 룸 활성화)
             </div>
             <div class="bg-black/90 px-6 py-3 rounded-xl border border-amber-500 flex items-center gap-4">
                 <div class="text-right text-3xl font-black text-amber-400"><span id="current-ammo">30</span>/30</div>
@@ -74,7 +74,7 @@
     <div id="canvas-container"></div>
 
     <script>
-        // ⚠️ 내 진짜 렌더 서버 주소가 맞는지 확인하세요!
+        // ⚠️ 내 진짜 렌더 서버 주소가 맞는지 꼭 확인하세요!
         const socket = io('https://online-fps-server.onrender.com'); 
 
         const PLAYER_SPEED = 0.12;
@@ -89,10 +89,10 @@
         
         let padMesh;
         const padRadius = 2.0;
-        const padPos = { x: 0, z: 4 }; // 기존 단일 노란색 발판 위치
+        const padPos = { x: 0, z: 4 }; 
         
         let gameMode = 'lobby'; 
-        let currentRoomId = null;
+        let currentRoomId = null; // 내가 소속된 방의 ID ('room_1' ~ 'room_8')
         let myRole = null;
         let opponentId = null;
         let isPlayerReady = false;
@@ -183,13 +183,14 @@
                 if (otherPlayers[playerInfo.id]) {
                     otherPlayers[playerInfo.id].position.copy(playerInfo.pos);
                     otherPlayers[playerInfo.id].rotation.y = playerInfo.rotY;
+                    otherPlayers[playerInfo.id].visible = true; 
+                } else {
+                    // 게임 도중 초기화되어 맵에 없는 상대가 뒤늦게 패킷을 보낼 때 대비
+                    spawnOtherPlayerMesh(playerInfo.id, playerInfo.pos);
                 }
             });
 
-            // 단일 패드 서버용 이벤트 갱신 동기화
-            socket.on('readyStatusUpdate', (statusData) => {
-                // 기존 단일 패드 서버가 보내주는 형식('A' 데이터가 아닐 경우 처리 포함)
-                const count = typeof statusData === 'object' ? (statusData['A'] || 0) : statusData;
+            socket.on('readyStatusUpdate', (count) => {
                 if (count > 0) {
                     padStatusTextEl.innerText = `매칭 중 (${count} / 2)`;
                     padStatusTextEl.className = "text-lg font-black text-amber-400 animate-pulse";
@@ -199,13 +200,26 @@
                 }
             });
 
+            // ❌ 8개 방이 풀가동 중일 때 발생하는 서버 정원 초과 에러 이벤트 핸들링
+            socket.on('serverFullError', () => {
+                isPlayerReady = false;
+                showResultAlert("🚨 서버 정원 초과! 모든 방이 플레이 중입니다.", "text-orange-500 bg-black/90 border-orange-500");
+                // 플레이어를 강제로 발판 바깥으로 튕겨냄 (안전조치)
+                yawObject.position.set(0, PLAYER_HEIGHT, 12); 
+            });
+
             socket.on('matchFound', (data) => {
                 currentRoomId = data.roomId;
                 myRole = data.role;
                 opponentId = data.opponentId;
                 gameMode = 'match';
 
-                gameStatusEl.innerText = `아레나 (BATTLE ARENA)`;
+                // 아레나 입장 전 맵에 남아있던 다른 로비 유저들을 내 화면에서 전부 숨김처리 (격리)
+                Object.keys(otherPlayers).forEach(id => {
+                    if (id !== opponentId) otherPlayers[id].visible = false;
+                });
+
+                gameStatusEl.innerText = `아레나 (BATTLE AREA)`;
                 gameStatusEl.className = "text-xl font-black text-rose-500 animate-pulse";
                 versusContainer.classList.remove('opacity-0');
 
@@ -239,7 +253,7 @@
                 setTimeout(() => damageFlashEl.className = '', 100);
 
                 if (player.hp <= 0) {
-                    socket.emit('matchOver', { winnerId: opponentId, loserId: socket.id });
+                    socket.emit('matchOver', { roomId: currentRoomId, winnerId: opponentId, loserId: socket.id });
                 }
             });
 
@@ -255,6 +269,10 @@
                 gameStatusEl.innerText = "대기실 (LOBBY)";
                 gameStatusEl.className = "text-xl font-black text-amber-400";
                 
+                // 화면의 모든 적 메시들 청소 후 재생성 프로세스 대비
+                Object.keys(otherPlayers).forEach(id => { scene.remove(otherPlayers[id]); });
+                otherPlayers = {};
+
                 if(result === 'win') {
                     scoreWinEl.innerText = parseInt(scoreWinEl.innerText) + 1;
                     showResultAlert("👑 대결 승리!", "text-green-400");
@@ -263,8 +281,13 @@
                     showResultAlert("💀 대결 패배...", "text-red-400");
                 }
 
+                // 로비 리스폰 위치 세팅
                 yawObject.position.set((Math.random() - 0.5) * 5, PLAYER_HEIGHT, 12);
                 yawObject.rotation.set(0, 0, 0);
+                
+                currentRoomId = null;
+                opponentId = null;
+                myRole = null;
                 isPlayerReady = false;
             });
 
@@ -292,7 +315,6 @@
             obs.position.set(0, 3, -35);
             scene.add(obs);
 
-            // 오리지널 노란색 배틀 패드 1개 배치
             padMesh = new THREE.Mesh(
                 new THREE.CylinderGeometry(padRadius, padRadius, 0.1, 32),
                 new THREE.MeshStandardMaterial({ color: 0xeab308, emissive: 0xeab308, emissiveIntensity: 0.4 })
@@ -302,6 +324,8 @@
         }
 
         function spawnOtherPlayerMesh(id, pos) {
+            if (otherPlayers[id]) return;
+
             const group = new THREE.Group();
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 0.6), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
             body.position.y = 0.9;
@@ -313,6 +337,12 @@
             body.userData = { targetId: id };
             head.userData = { targetId: id };
             group.position.copy(pos);
+            
+            // 만약 내가 게임 중인데 엉뚱한 로비 유저가 접속했다면 숨김 상태로 스폰
+            if (gameMode === 'match' && id !== opponentId) {
+                group.visible = false;
+            }
+
             scene.add(group);
             otherPlayers[id] = group;
         }
@@ -374,21 +404,27 @@
             let endVec = new THREE.Vector3();
             raycaster.ray.at(100, endVec);
 
+            // 내 화면에 렌더링된 메시들 중 '현재 보이고 있는(visible)' 타겟만 맞출 수 있도록 필터링 (완벽 방 격리)
             const targetMeshes = [];
-            Object.values(otherPlayers).forEach(p => p.traverse(c => { if(c.isMesh) targetMeshes.push(c); }));
+            Object.values(otherPlayers).forEach(p => {
+                if (p.visible) {
+                    p.traverse(c => { if(c.isMesh) targetMeshes.push(c); });
+                }
+            });
 
             const intersects = raycaster.intersectObjects(targetMeshes);
             if (intersects.length > 0) {
                 const hit = intersects[0];
                 endVec.copy(hit.point);
 
-                if (gameMode === 'match' && hit.object.userData.targetId) {
-                    socket.emit('hitPlayer', { targetId: hit.object.userData.targetId, damage: DAMAGE_PER_SHOT });
+                if (gameMode === 'match' && hit.object.userData.targetId === opponentId) {
+                    socket.emit('hitPlayer', { roomId: currentRoomId, targetId: hit.object.userData.targetId, damage: DAMAGE_PER_SHOT });
                 }
             }
 
             renderTracerTrail(startVec, endVec, 0xf59e0b);
-            socket.emit('shoot', { start: startVec, end: endVec });
+            // 총 궤적 패킷을 보낼 때 내 Room ID도 같이 실어서 보안 격리 통신
+            socket.emit('shoot', { roomId: currentRoomId, start: startVec, end: endVec });
         }
 
         function renderTracerTrail(start, end, color) {
@@ -429,30 +465,29 @@
                 yawObject.position.x = Math.max(-14, Math.min(14, yawObject.position.x));
                 yawObject.position.z = Math.max(-14, Math.min(14, yawObject.position.z));
 
-                // 단일 패드 밟았는지 실시간 체크 및 서버 전송
                 const distToPad = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(padPos.x, padPos.z));
                 const standingOnPad = (distToPad < padRadius);
 
                 if (standingOnPad !== isPlayerReady) {
                     isPlayerReady = standingOnPad;
-                    // 서버가 단일 패드 매칭(`padId: 'A'`) 형식으로 작동하도록 맞춰 전송
-                    socket.emit('toggleReady', { padId: 'A', isReady: isPlayerReady });
+                    socket.emit('toggleReady', { isReady: isPlayerReady });
                 }
             } else {
                 yawObject.position.x = Math.max(-18, Math.min(18, yawObject.position.x));
                 yawObject.position.z = Math.max(-53, Math.min(-17, yawObject.position.z));
             }
 
-            socket.emit('playerMovement', { pos: yawObject.position, rotY: yawObject.rotation.y });
+            // 패킷을 보낼 때 내가 어느 방(로비면 null)에 있는지 실시간으로 동봉하여 전송
+            socket.emit('playerMovement', { roomId: currentRoomId, pos: yawObject.position, rotY: yawObject.rotation.y });
         }
 
         function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
         function showResultAlert(msg, cssClass) {
             const div = document.createElement('div');
-            div.className = `absolute top-1/3 left-1/2 -translate-x-1/2 bg-black/80 px-8 py-4 border border-white/20 text-3xl font-black rounded-2xl pointer-events-none z-50 animate-bounce ${cssClass}`;
+            div.className = `absolute top-1/3 left-1/2 -translate-x-1/2 bg-black/80 px-8 py-4 border border-white/20 text-2xl font-black rounded-2xl pointer-events-none z-50 animate-bounce ${cssClass}`;
             div.innerText = msg;
             document.body.appendChild(div);
-            setTimeout(() => div.remove(), 2500);
+            setTimeout(() => div.remove(), 3500);
         }
 
         function animate() {
