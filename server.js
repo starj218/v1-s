@@ -1,4 +1,4 @@
-// Render 전용 멀티 매칭 온라인 총게임 백엔드 서버 (server.js)
+// Render 전용 9개 매칭 패드 온라인 총게임 백엔드 서버 (server.js)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -6,18 +6,22 @@ const io = require('socket.io')(http, {
     cors: { origin: "*" }
 });
 
-let lobbyPlayers = {}; // 로비 플레이어 데이터
-// 각 발판(A, B, C)별로 대기 중인 유저 목록 관리
+let lobbyPlayers = {}; 
 let readyPads = {
-    'A': [],
-    'B': [],
-    'C': []
+    'A': [], 'B': [], 'C': [],
+    'D': [], 'E': [], 'F': [],
+    'G': [], 'H': [], 'I': []
 };
+
+function broadcastPadStatus() {
+    let status = {};
+    Object.keys(readyPads).forEach(padId => { status[padId] = readyPads[padId].length; });
+    io.emit('readyStatusUpdate', status);
+}
 
 io.on('connection', (socket) => {
     console.log(`🎮 유저 접속: ${socket.id}`);
 
-    // 초기 체력 100 설정
     lobbyPlayers[socket.id] = {
         id: socket.id,
         pos: { x: (Math.random() - 0.5) * 5, y: 1.6, z: 12 },
@@ -28,6 +32,7 @@ io.on('connection', (socket) => {
 
     socket.emit('currentPlayers', lobbyPlayers);
     socket.broadcast.emit('newPlayer', lobbyPlayers[socket.id]);
+    broadcastPadStatus();
 
     socket.on('playerMovement', (movementData) => {
         if (lobbyPlayers[socket.id]) {
@@ -37,38 +42,26 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 어떤 발판(padId)에 올라가거나 내려왔을 때 처리
     socket.on('toggleReady', (data) => {
         if (!lobbyPlayers[socket.id]) return;
         const { padId, isReady } = data;
 
         if (isReady) {
-            // 다른 발판에 이미 들어가 있다면 제거
             if (lobbyPlayers[socket.id].currentPad && lobbyPlayers[socket.id].currentPad !== padId) {
                 const oldPad = lobbyPlayers[socket.id].currentPad;
                 readyPads[oldPad] = readyPads[oldPad].filter(id => id !== socket.id);
             }
-            
             lobbyPlayers[socket.id].currentPad = padId;
-            if (!readyPads[padId].includes(socket.id)) {
-                readyPads[padId].push(socket.id);
-            }
+            if (!readyPads[padId].includes(socket.id)) readyPads[padId].push(socket.id);
         } else {
             if (lobbyPlayers[socket.id].currentPad === padId) {
                 lobbyPlayers[socket.id].currentPad = null;
                 readyPads[padId] = readyPads[padId].filter(id => id !== socket.id);
             }
         }
+        broadcastPadStatus();
 
-        // 모든 유저에게 각 발판들의 인원 상태를 브로드캐스트
-        io.emit('readyStatusUpdate', {
-            padA: readyPads['A'].length,
-            padB: readyPads['B'].length,
-            padC: readyPads['C'].length
-        });
-
-        // 특정 발판에 2명이 모이면 그 발판 유저들끼리 즉시 매칭!
-        if (readyPads[padId].length >= 2) {
+        if (readyPads[padId] && readyPads[padId].length >= 2) {
             const p1 = readyPads[padId].shift();
             const p2 = readyPads[padId].shift();
             const roomId = `room_${padId}_${Date.now()}`;
@@ -76,23 +69,28 @@ io.on('connection', (socket) => {
             lobbyPlayers[p1].currentPad = null;
             lobbyPlayers[p2].currentPad = null;
 
+            // 아레나 입장 전 두 유저의 체력을 100으로 완전 초기화
+            lobbyPlayers[p1].hp = 100;
+            lobbyPlayers[p2].hp = 100;
+
             io.to(p1).emit('matchFound', { roomId, role: 'p1', opponentId: p2, padId });
             io.to(p2).emit('matchFound', { roomId, role: 'p2', opponentId: p1, padId });
-            
-            // 매칭 후 발판 인원 재공지
-            io.emit('readyStatusUpdate', {
-                padA: readyPads['A'].length,
-                padB: readyPads['B'].length,
-                padC: readyPads['C'].length
-            });
+            broadcastPadStatus();
         }
     });
 
     socket.on('shoot', (shootData) => { socket.broadcast.emit('opponentShoot', shootData); });
     
-    // 타격 판정: 헤드건 몸통이건 상관없이 무조건 고정 데미지를 주어 15발 맞으면 죽게 설계
+    // 🎯 HP 디버깅의 핵심: 맞은 유저에게 데미지를 주고, 맞춘 사람에게도 깎인 피를 동기화하여 전송!
     socket.on('hitPlayer', (data) => { 
-        io.to(data.targetId).emit('damaged', { damage: data.damage }); 
+        const target = lobbyPlayers[data.targetId];
+        if (target) {
+            target.hp = Math.max(0, target.hp - data.damage);
+            // 1. 맞은 사람 본인 화면에 피 깎기
+            io.to(data.targetId).emit('damaged', { damage: data.damage, currentHp: target.hp }); 
+            // 2. 때린 사람(상대방) 화면의 '오른쪽 상대 HP 바'도 실시간으로 깎이도록 전송!
+            socket.emit('updateEnemyHP', { enemyHp: target.hp });
+        }
     });
     
     socket.on('matchOver', (data) => {
@@ -101,21 +99,14 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`❌ 유저 퇴장: ${socket.id}`);
         const padId = lobbyPlayers[socket.id]?.currentPad;
-        if (padId) {
-            readyPads[padId] = readyPads[padId].filter(id => id !== socket.id);
-        }
+        if (padId && readyPads[padId]) readyPads[padId] = readyPads[padId].filter(id => id !== socket.id);
         delete lobbyPlayers[socket.id];
         io.emit('playerDisconnected', socket.id);
-        io.emit('readyStatusUpdate', {
-            padA: readyPads['A']?.length || 0,
-            padB: readyPads['B']?.length || 0,
-            padC: readyPads['C']?.length || 0
-        });
+        broadcastPadStatus();
     });
 });
 
 const listener = http.listen(process.env.PORT || 3000, () => {
-    console.log(`🚀 서버가 포트 ${listener.address().port}에서 작동 중입니다!`);
+    console.log(`🚀 서버 구동 중: 포트 ${listener.address().port}`);
 });
