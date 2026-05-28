@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 인벤토리 아이콘 업데이트</title>
+    <title>ONLINE FPS ARENA - 샷건 업데이트</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -22,7 +22,6 @@
             background-color: rgba(245, 158, 11, 0.15) !important;
             box-shadow: inset 0 0 15px rgba(245, 158, 11, 0.3), 0 0 15px rgba(245, 158, 11, 0.2);
         }
-        /* 활성화 시 아이콘도 주황색으로 빛나게 처리 */
         .weapon-slot-active i {
             color: #f59e0b !important;
             filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6));
@@ -53,7 +52,7 @@
 
     <div id="crosshair"></div>
 
-    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 pointer-events-none z-10 flex flex-col gap-3">
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 pointer-events-none z-10 flex flex-col gap-3">
         <div id="hp-versus-container" class="flex justify-between items-center bg-black/70 p-3 rounded-2xl border border-white/10 opacity-0 transition-opacity duration-300">
             <div class="w-2/5">
                 <div class="flex justify-between text-xs font-bold mb-1"><span class="text-blue-400">나</span> <span id="my-hp-text">100 HP</span></div>
@@ -68,28 +67,39 @@
 
         <div class="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4">
             <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300 self-start sm:self-auto">
-                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">휠 스크롤</span>: 무기 교체 | <span class="text-amber-400 font-bold">R</span>: 라이플 장전 | <span class="text-amber-400 font-bold">클릭</span>: 공격
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">휠 스크롤</span>: 무기 교체 | <span class="text-amber-400 font-bold">R</span>: 장전 | <span class="text-amber-400 font-bold">클릭</span>: 공격
             </div>
             
             <div class="flex gap-2 pointer-events-none">
-                <div id="slot-rifle" class="bg-black/80 px-4 py-2 rounded-xl border-2 border-gray-700 min-w-[170px] flex items-center justify-between transition-all duration-200 weapon-slot-active">
+                <div id="slot-rifle" class="bg-black/80 px-3 py-2 rounded-xl border-2 border-gray-700 min-w-[150px] flex items-center justify-between transition-all duration-200 weapon-slot-active">
                     <div class="flex flex-col items-start">
-                        <div class="text-[9px] text-gray-400 font-bold tracking-widest uppercase">MAIN WEAPON</div>
+                        <div class="text-[8px] text-gray-400 font-bold tracking-widest">SLOT 1</div>
                         <div class="text-xs font-extrabold text-white mt-0.5">RIFLE M4A1</div>
-                        <div class="text-xl font-black text-amber-400 mt-1 tabular-nums" id="ammo-display-rifle">30<span class="text-gray-500 text-sm">/30</span></div>
+                        <div class="text-lg font-black text-amber-400 mt-0.5 tabular-nums" id="ammo-display-rifle">30<span class="text-gray-500 text-xs">/30</span></div>
                     </div>
-                    <div class="text-2xl text-gray-600 pl-3">
+                    <div class="text-xl text-gray-600 pl-2">
                         <i class="fa-solid fa-gun transition-colors duration-200"></i>
                     </div>
                 </div>
-                
-                <div id="slot-knife" class="bg-black/80 px-4 py-2 rounded-xl border-2 border-gray-700 min-w-[170px] flex items-center justify-between transition-all duration-200">
+
+                <div id="slot-shotgun" class="bg-black/80 px-3 py-2 rounded-xl border-2 border-gray-700 min-w-[150px] flex items-center justify-between transition-all duration-200">
                     <div class="flex flex-col items-start">
-                        <div class="text-[9px] text-gray-400 font-bold tracking-widest uppercase">SUB WEAPON</div>
-                        <div class="text-xs font-extrabold text-white mt-0.5">TACTICAL KNIFE</div>
-                        <div class="text-xl font-black text-gray-400 mt-1" id="ammo-display-knife">INF</div>
+                        <div class="text-[8px] text-gray-400 font-bold tracking-widest">SLOT 2</div>
+                        <div class="text-xs font-extrabold text-white mt-0.5">PUMP SHOTGUN</div>
+                        <div class="text-lg font-black text-amber-400 mt-0.5 tabular-nums" id="ammo-display-shotgun">5<span class="text-gray-500 text-xs">/5</span></div>
                     </div>
-                    <div class="text-2xl text-gray-600 pl-3">
+                    <div class="text-xl text-gray-600 pl-2">
+                        <i class="fa-solid fa-bolt transition-colors duration-200"></i>
+                    </div>
+                </div>
+                
+                <div id="slot-knife" class="bg-black/80 px-3 py-2 rounded-xl border-2 border-gray-700 min-w-[150px] flex items-center justify-between transition-all duration-200">
+                    <div class="flex flex-col items-start">
+                        <div class="text-[8px] text-gray-400 font-bold tracking-widest">SLOT 3</div>
+                        <div class="text-xs font-extrabold text-white mt-0.5">TACTICAL KNIFE</div>
+                        <div class="text-lg font-black text-gray-400 mt-0.5" id="ammo-display-knife">INF</div>
+                    </div>
+                    <div class="text-xl text-gray-600 pl-2">
                         <i class="fa-solid fa-screwdriver-wrench rotate-45 transition-colors duration-200"></i>
                     </div>
                 </div>
@@ -115,9 +125,11 @@
         const GRAVITY = 0.0035;
         const PLAYER_HEIGHT = 1.6;
         
+        // 무기 스펙 밸런스 설정
         const DAMAGE_RIFLE = 6.7; 
         const DAMAGE_KNIFE = 35.0; 
         const KNIFE_RANGE = 2.5; 
+        const DAMAGE_SHOTGUN_PELLET = 12.0; // 샷건 펠릿당 데미지 (5발 다 맞으면 60)
 
         let scene, camera, renderer;
         let keys = {};
@@ -133,12 +145,17 @@
         let opponentId = null;
         let isPlayerReady = false;
 
+        // 무기 목록 정의 (소총 -> 샷건 -> 칼 순서)
+        const WEAPONS = ['rifle', 'shotgun', 'knife'];
+        let currentWeaponIndex = 0; 
         let currentWeapon = 'rifle'; 
 
         let player = {
             hp: 100,
             ammo: 30,
             maxAmmo: 30,
+            shotgunAmmo: 5,
+            maxShotgunAmmo: 5,
             isReloading: false,
             pos: new THREE.Vector3(0, PLAYER_HEIGHT, 12), 
             velocity: new THREE.Vector3(),
@@ -149,7 +166,7 @@
         };
 
         let gunContainer; 
-        let rifleMesh, knifeMesh;
+        let rifleMesh, shotgunMesh, knifeMesh;
         let isLocked = false;
         const pitchObject = new THREE.Object3D();
         const yawObject = new THREE.Object3D();
@@ -158,8 +175,10 @@
         const introModal = document.getElementById('intro-modal');
         
         const slotRifleEl = document.getElementById('slot-rifle');
+        const slotShotgunEl = document.getElementById('slot-shotgun');
         const slotKnifeEl = document.getElementById('slot-knife');
         const ammoDisplayRifle = document.getElementById('ammo-display-rifle');
+        const ammoDisplayShotgun = document.getElementById('ammo-display-shotgun');
 
         const myHpBar = document.getElementById('my-hp-bar');
         const myHpText = document.getElementById('my-hp-text');
@@ -242,15 +261,13 @@
                     otherPlayers[playerInfo.id].visible = true; 
 
                     const enemyGun = otherPlayers[playerInfo.id].getObjectByName("enemyWeapon_rifle");
+                    const enemyShotgun = otherPlayers[playerInfo.id].getObjectByName("enemyWeapon_shotgun");
                     const enemyKnife = otherPlayers[playerInfo.id].getObjectByName("enemyWeapon_knife");
-                    if (enemyGun && enemyKnife) {
-                        if (playerInfo.weapon === 'knife') {
-                            enemyGun.visible = false;
-                            enemyKnife.visible = true;
-                        } else {
-                            enemyGun.visible = true;
-                            enemyKnife.visible = false;
-                        }
+                    
+                    if (enemyGun && enemyShotgun && enemyKnife) {
+                        enemyGun.visible = (playerInfo.weapon === 'rifle');
+                        enemyShotgun.visible = (playerInfo.weapon === 'shotgun');
+                        enemyKnife.visible = (playerInfo.weapon === 'knife');
                     }
                 } else {
                     spawnOtherPlayerMesh(playerInfo.id, playerInfo.pos);
@@ -297,6 +314,7 @@
                 
                 player.hp = 100;
                 player.ammo = player.maxAmmo;
+                player.shotgunAmmo = player.maxShotgunAmmo;
                 
                 swapToWeapon('rifle');
                 
@@ -308,7 +326,16 @@
 
             socket.on('opponentShoot', (data) => { 
                 if(data.isKnifeAttack) return;
-                renderTracerTrail(data.start, data.end, 0xef4444); 
+                // 상대방이 샷건을 쐈을 때 다중 궤적 동기화 렌더링
+                if (data.isShotgun) {
+                    if(data.pellets && data.pellets.length > 0) {
+                        data.pellets.forEach(p => {
+                            renderTracerTrail(data.start, p, 0xef4444);
+                        });
+                    }
+                } else {
+                    renderTracerTrail(data.start, data.end, 0xef4444); 
+                }
             });
 
             socket.on('damaged', (data) => {
@@ -451,6 +478,12 @@
             enemyRifle.name = "enemyWeapon_rifle";
             group.add(enemyRifle);
 
+            const enemyShotgun = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.18, 0.8), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+            enemyShotgun.position.set(0.4, 0.85, -0.4);
+            enemyShotgun.name = "enemyWeapon_shotgun";
+            enemyShotgun.visible = false;
+            group.add(enemyShotgun);
+
             const enemyKnife = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.4), new THREE.MeshStandardMaterial({ color: 0xd946ef })); 
             enemyKnife.position.set(0.4, 0.9, -0.2);
             enemyKnife.name = "enemyWeapon_knife";
@@ -474,12 +507,22 @@
             gunContainer.position.set(0.25, -0.2, -0.4);
             camera.add(gunContainer);
 
+            // 1. 소총 렌더링
             rifleMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(0.1, 0.15, 1.0), 
                 new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 })
             );
             gunContainer.add(rifleMesh);
 
+            // 2. 샷건 렌더링
+            shotgunMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.12, 0.16, 0.85),
+                new THREE.MeshStandardMaterial({ color: 0x78350f, metalness: 0.5, roughness: 0.5 }) // 약간 묵직한 목재/철재 느낌
+            );
+            shotgunMesh.visible = false;
+            gunContainer.add(shotgunMesh);
+
+            // 3. 단검 렌더링
             knifeMesh = new THREE.Group();
             const blade = new THREE.Mesh( 
                 new THREE.BoxGeometry(0.02, 0.08, 0.45),
@@ -502,29 +545,41 @@
         function onWindowWheel(e) {
             if (!isLocked) return;
             if (e.deltaY > 0) {
-                swapToWeapon('knife');
+                // 휠 다운: 다음 무기
+                currentWeaponIndex = (currentWeaponIndex + 1) % WEAPONS.length;
             } else if (e.deltaY < 0) {
-                swapToWeapon('rifle');
+                // 휠 업: 이전 무기
+                currentWeaponIndex = (currentWeaponIndex - 1 + WEAPONS.length) % WEAPONS.length;
             }
+            swapToWeapon(WEAPONS[currentWeaponIndex]);
         }
 
         function swapToWeapon(type) {
             if (currentWeapon === type || player.isReloading) return;
             currentWeapon = type;
+            currentWeaponIndex = WEAPONS.indexOf(type);
             player.isShooting = false; 
 
-            if (type === 'knife') {
-                rifleMesh.visible = false;
-                knifeMesh.visible = true;
-                
-                slotRifleEl.classList.remove('weapon-slot-active');
-                slotKnifeEl.classList.add('weapon-slot-active');
-            } else {
+            // 모든 메시 일단 숨기기
+            rifleMesh.visible = false;
+            shotgunMesh.visible = false;
+            knifeMesh.visible = false;
+
+            // 모든 UI 액티브 클래스 해제
+            slotRifleEl.classList.remove('weapon-slot-active');
+            slotShotgunEl.classList.remove('weapon-slot-active');
+            slotKnifeEl.classList.remove('weapon-slot-active');
+
+            // 해당하는 것 활성화
+            if (type === 'rifle') {
                 rifleMesh.visible = true;
-                knifeMesh.visible = false;
-                
-                slotKnifeEl.classList.remove('weapon-slot-active');
                 slotRifleEl.classList.add('weapon-slot-active');
+            } else if (type === 'shotgun') {
+                shotgunMesh.visible = true;
+                slotShotgunEl.classList.add('weapon-slot-active');
+            } else if (type === 'knife') {
+                knifeMesh.visible = true;
+                slotKnifeEl.classList.add('weapon-slot-active');
             }
         }
 
@@ -534,8 +589,12 @@
                 player.velocity.y = JUMP_FORCE;
                 player.isGrounded = false;
             }
-            if (e.code === 'KeyR' && currentWeapon === 'rifle' && player.ammo < player.maxAmmo && !player.isReloading) {
-                reloadPlayerWeapon();
+            if (e.code === 'KeyR' && !player.isReloading) {
+                if (currentWeapon === 'rifle' && player.ammo < player.maxAmmo) {
+                    reloadPlayerWeapon('rifle');
+                } else if (currentWeapon === 'shotgun' && player.shotgunAmmo < player.maxShotgunAmmo) {
+                    reloadPlayerWeapon('shotgun');
+                }
             }
         }
         function onKeyUp(e) { keys[e.code] = false; }
@@ -546,82 +605,130 @@
             pitchObject.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchObject.rotation.x));
         }
 
-        function reloadPlayerWeapon() {
+        function reloadPlayerWeapon(type) {
             player.isReloading = true;
-            ammoDisplayRifle.innerHTML = `<span class="text-amber-500 animate-pulse text-sm">RELOAD</span>`;
-            setTimeout(() => {
-                player.ammo = player.maxAmmo;
-                ammoDisplayRifle.innerHTML = `${player.ammo}<span class="text-gray-500 text-sm">/${player.maxAmmo}</span>`;
-                player.isReloading = false;
-            }, 1200);
+            if (type === 'rifle') {
+                ammoDisplayRifle.innerHTML = `<span class="text-amber-500 animate-pulse text-xs">RELOAD</span>`;
+                setTimeout(() => {
+                    player.ammo = player.maxAmmo;
+                    ammoDisplayRifle.innerHTML = `${player.ammo}<span class="text-gray-500 text-xs">/${player.maxAmmo}</span>`;
+                    player.isReloading = false;
+                }, 1200);
+            } else if (type === 'shotgun') {
+                ammoDisplayShotgun.innerHTML = `<span class="text-amber-500 animate-pulse text-xs">RELOAD</span>`;
+                setTimeout(() => {
+                    player.shotgunAmmo = player.maxShotgunAmmo;
+                    ammoDisplayShotgun.innerHTML = `${player.shotgunAmmo}<span class="text-gray-500 text-xs">/${player.maxShotgunAmmo}</span>`;
+                    player.isReloading = false;
+                }, 1500); // 샷건은 장전 딜레이 살짝 길게
+            }
         }
 
         function handleWeaponShooting() {
             if (!isLocked || player.isReloading) return;
             
-            if (currentWeapon === 'rifle' && player.ammo <= 0) {
-                reloadPlayerWeapon();
-                return;
-            }
+            // 잔탄 검사
+            if (currentWeapon === 'rifle' && player.ammo <= 0) { reloadPlayerWeapon('rifle'); return; }
+            if (currentWeapon === 'shotgun' && player.shotgunAmmo <= 0) { reloadPlayerWeapon('shotgun'); return; }
 
             const now = performance.now();
-            const weaponDelay = currentWeapon === 'knife' ? 250 : player.shootDelay;
-            if (now - player.lastShotTime < weaponDelay) return;
+            let weaponDelay = player.shootDelay; // 라이플 기본 100ms
+            if (currentWeapon === 'knife') weaponDelay = 250;
+            if (currentWeapon === 'shotgun') weaponDelay = 800; // 샷건 연사속도는 제한
 
+            if (now - player.lastShotTime < weaponDelay) return;
             player.lastShotTime = now;
 
+            // 반동 애니메이션
             gunContainer.position.z = -0.3;
             setTimeout(() => gunContainer.position.z = -0.4, 60);
 
-            if (currentWeapon === 'rifle') {
-                player.ammo--;
-                ammoDisplayRifle.innerHTML = `${player.ammo}<span class="text-gray-500 text-sm">/${player.maxAmmo}</span>`;
-            }
-
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            const startVec = new THREE.Vector3(0.25, -0.15, -0.9).unproject(camera);
-            let endVec = new THREE.Vector3();
-            
-            const currentRange = currentWeapon === 'knife' ? KNIFE_RANGE : 100;
-            raycaster.ray.at(currentRange, endVec);
-
+            // 타겟 메시 리스트 확보
             const targetMeshes = [];
             Object.values(otherPlayers).forEach(p => {
                 if (p.visible) {
                     p.traverse(c => { if(c.isMesh) targetMeshes.push(c); });
                 }
             });
-            
-            if (currentWeapon === 'rifle') {
+            if (currentWeapon !== 'knife') {
                 obstacles.forEach(obs => targetMeshes.push(obs));
             }
 
-            const intersects = raycaster.intersectObjects(targetMeshes);
-            if (intersects.length > 0) {
-                const hit = intersects[0];
-                
-                if (hit.distance <= currentRange) {
-                    endVec.copy(hit.point);
-
-                    if (gameMode === 'match' && hit.object.userData.targetId === opponentId) {
-                        const finalDamage = currentWeapon === 'knife' ? DAMAGE_KNIFE : DAMAGE_RIFLE;
-                        socket.emit('hitPlayer', { roomId: currentRoomId, targetId: hit.object.userData.targetId, damage: finalDamage });
-                    }
-                }
-            }
+            const startVec = new THREE.Vector3(0.25, -0.15, -0.9).unproject(camera);
 
             if (currentWeapon === 'rifle') {
-                renderTracerTrail(startVec, endVec, 0xfacc15); 
+                player.ammo--;
+                ammoDisplayRifle.innerHTML = `${player.ammo}<span class="text-gray-500 text-xs">/${player.maxAmmo}</span>`;
+
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                let endVec = new THREE.Vector3();
+                raycaster.ray.at(100, endVec);
+
+                const intersects = raycaster.intersectObjects(targetMeshes);
+                if (intersects.length > 0) {
+                    endVec.copy(intersects[0].point);
+                    if (gameMode === 'match' && intersects[0].object.userData.targetId === opponentId) {
+                        socket.emit('hitPlayer', { roomId: currentRoomId, targetId: opponentId, damage: DAMAGE_RIFLE });
+                    }
+                }
+                renderTracerTrail(startVec, endVec, 0xfacc15);
+                socket.emit('shoot', { roomId: currentRoomId, start: startVec, end: endVec, isKnifeAttack: false, isShotgun: false });
+
+            } else if (currentWeapon === 'shotgun') {
+                player.shotgunAmmo--;
+                ammoDisplayShotgun.innerHTML = `${player.shotgunAmmo}<span class="text-gray-500 text-xs">/${player.maxShotgunAmmo}</span>`;
+
+                let totalShotgunDamage = 0;
+                let shotgunPelletEnds = [];
+
+                // 5개의 펠릿 분산 발사
+                for (let i = 0; i < 5; i++) {
+                    // 미세한 무작위 오차 부여 (산탄 범위)
+                    const spreadX = (Math.random() - 0.5) * 0.07;
+                    const spreadY = (Math.random() - 0.5) * 0.07;
+
+                    const raycaster = new THREE.Raycaster();
+                    raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
+                    
+                    let endVec = new THREE.Vector3();
+                    raycaster.ray.at(35, endVec); // 샷건 유효사거리 35미터 정도 제한
+
+                    const intersects = raycaster.intersectObjects(targetMeshes);
+                    if (intersects.length > 0 && intersects[0].distance <= 35) {
+                        endVec.copy(intersects[0].point);
+                        if (gameMode === 'match' && intersects[0].object.userData.targetId === opponentId) {
+                            totalShotgunDamage += DAMAGE_SHOTGUN_PELLET;
+                        }
+                    }
+                    shotgunPelletEnds.push(endVec.clone());
+                    renderTracerTrail(startVec, endVec, 0xf59e0b); // 주황빛 궤적
+                }
+
+                if (gameMode === 'match' && totalShotgunDamage > 0) {
+                    socket.emit('hitPlayer', { roomId: currentRoomId, targetId: opponentId, damage: totalShotgunDamage });
+                }
+
+                socket.emit('shoot', { 
+                    roomId: currentRoomId, 
+                    start: startVec, 
+                    isKnifeAttack: false, 
+                    isShotgun: true, 
+                    pellets: shotgunPelletEnds 
+                });
+
+            } else if (currentWeapon === 'knife') {
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = raycaster.intersectObjects(targetMeshes);
+                
+                if (intersects.length > 0 && intersects[0].distance <= KNIFE_RANGE) {
+                    if (gameMode === 'match' && intersects[0].object.userData.targetId === opponentId) {
+                        socket.emit('hitPlayer', { roomId: currentRoomId, targetId: opponentId, damage: DAMAGE_KNIFE });
+                    }
+                }
+                socket.emit('shoot', { roomId: currentRoomId, isKnifeAttack: true });
             }
-            
-            socket.emit('shoot', { 
-                roomId: currentRoomId, 
-                start: startVec, 
-                end: endVec, 
-                isKnifeAttack: (currentWeapon === 'knife') 
-            });
         }
 
         function renderTracerTrail(start, end, color) {
