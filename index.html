@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 샷건 업데이트</title>
+    <title>ONLINE FPS ARENA - 매칭 시스템 안정화</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -16,7 +16,6 @@
         #damage-flash { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; transition: all 0.1s; z-index: 5; }
         .hit { background-color: rgba(239, 68, 68, 0.4); border: 15px solid rgba(239, 68, 68, 0.6); }
         
-        /* 현재 선택된 무기 슬롯의 활성화 네온 효과 */
         .weapon-slot-active {
             border-color: #f59e0b !important;
             background-color: rgba(245, 158, 11, 0.15) !important;
@@ -125,11 +124,10 @@
         const GRAVITY = 0.0035;
         const PLAYER_HEIGHT = 1.6;
         
-        // 무기 스펙 밸런스 설정
         const DAMAGE_RIFLE = 6.7; 
         const DAMAGE_KNIFE = 35.0; 
         const KNIFE_RANGE = 2.5; 
-        const DAMAGE_SHOTGUN_PELLET = 12.0; // 샷건 펠릿당 데미지 (5발 다 맞으면 60)
+        const DAMAGE_SHOTGUN_PELLET = 12.0;
 
         let scene, camera, renderer;
         let keys = {};
@@ -145,7 +143,6 @@
         let opponentId = null;
         let isPlayerReady = false;
 
-        // 무기 목록 정의 (소총 -> 샷건 -> 칼 순서)
         const WEAPONS = ['rifle', 'shotgun', 'knife'];
         let currentWeaponIndex = 0; 
         let currentWeapon = 'rifle'; 
@@ -326,7 +323,6 @@
 
             socket.on('opponentShoot', (data) => { 
                 if(data.isKnifeAttack) return;
-                // 상대방이 샷건을 쐈을 때 다중 궤적 동기화 렌더링
                 if (data.isShotgun) {
                     if(data.pellets && data.pellets.length > 0) {
                         data.pellets.forEach(p => {
@@ -507,22 +503,19 @@
             gunContainer.position.set(0.25, -0.2, -0.4);
             camera.add(gunContainer);
 
-            // 1. 소총 렌더링
             rifleMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(0.1, 0.15, 1.0), 
                 new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 })
             );
             gunContainer.add(rifleMesh);
 
-            // 2. 샷건 렌더링
             shotgunMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(0.12, 0.16, 0.85),
-                new THREE.MeshStandardMaterial({ color: 0x78350f, metalness: 0.5, roughness: 0.5 }) // 약간 묵직한 목재/철재 느낌
+                new THREE.MeshStandardMaterial({ color: 0x78350f, metalness: 0.5, roughness: 0.5 })
             );
             shotgunMesh.visible = false;
             gunContainer.add(shotgunMesh);
 
-            // 3. 단검 렌더링
             knifeMesh = new THREE.Group();
             const blade = new THREE.Mesh( 
                 new THREE.BoxGeometry(0.02, 0.08, 0.45),
@@ -545,10 +538,8 @@
         function onWindowWheel(e) {
             if (!isLocked) return;
             if (e.deltaY > 0) {
-                // 휠 다운: 다음 무기
                 currentWeaponIndex = (currentWeaponIndex + 1) % WEAPONS.length;
             } else if (e.deltaY < 0) {
-                // 휠 업: 이전 무기
                 currentWeaponIndex = (currentWeaponIndex - 1 + WEAPONS.length) % WEAPONS.length;
             }
             swapToWeapon(WEAPONS[currentWeaponIndex]);
@@ -560,17 +551,14 @@
             currentWeaponIndex = WEAPONS.indexOf(type);
             player.isShooting = false; 
 
-            // 모든 메시 일단 숨기기
             rifleMesh.visible = false;
             shotgunMesh.visible = false;
             knifeMesh.visible = false;
 
-            // 모든 UI 액티브 클래스 해제
             slotRifleEl.classList.remove('weapon-slot-active');
             slotShotgunEl.classList.remove('weapon-slot-active');
             slotKnifeEl.classList.remove('weapon-slot-active');
 
-            // 해당하는 것 활성화
             if (type === 'rifle') {
                 rifleMesh.visible = true;
                 slotRifleEl.classList.add('weapon-slot-active');
@@ -620,30 +608,27 @@
                     player.shotgunAmmo = player.maxShotgunAmmo;
                     ammoDisplayShotgun.innerHTML = `${player.shotgunAmmo}<span class="text-gray-500 text-xs">/${player.maxShotgunAmmo}</span>`;
                     player.isReloading = false;
-                }, 1500); // 샷건은 장전 딜레이 살짝 길게
+                }, 1500); 
             }
         }
 
         function handleWeaponShooting() {
             if (!isLocked || player.isReloading) return;
             
-            // 잔탄 검사
             if (currentWeapon === 'rifle' && player.ammo <= 0) { reloadPlayerWeapon('rifle'); return; }
             if (currentWeapon === 'shotgun' && player.shotgunAmmo <= 0) { reloadPlayerWeapon('shotgun'); return; }
 
             const now = performance.now();
-            let weaponDelay = player.shootDelay; // 라이플 기본 100ms
+            let weaponDelay = player.shootDelay; 
             if (currentWeapon === 'knife') weaponDelay = 250;
-            if (currentWeapon === 'shotgun') weaponDelay = 800; // 샷건 연사속도는 제한
+            if (currentWeapon === 'shotgun') weaponDelay = 800; 
 
             if (now - player.lastShotTime < weaponDelay) return;
             player.lastShotTime = now;
 
-            // 반동 애니메이션
             gunContainer.position.z = -0.3;
             setTimeout(() => gunContainer.position.z = -0.4, 60);
 
-            // 타겟 메시 리스트 확보
             const targetMeshes = [];
             Object.values(otherPlayers).forEach(p => {
                 if (p.visible) {
@@ -682,9 +667,7 @@
                 let totalShotgunDamage = 0;
                 let shotgunPelletEnds = [];
 
-                // 5개의 펠릿 분산 발사
                 for (let i = 0; i < 5; i++) {
-                    // 미세한 무작위 오차 부여 (산탄 범위)
                     const spreadX = (Math.random() - 0.5) * 0.07;
                     const spreadY = (Math.random() - 0.5) * 0.07;
 
@@ -692,7 +675,7 @@
                     raycaster.setFromCamera(new THREE.Vector2(spreadX, spreadY), camera);
                     
                     let endVec = new THREE.Vector3();
-                    raycaster.ray.at(35, endVec); // 샷건 유효사거리 35미터 정도 제한
+                    raycaster.ray.at(35, endVec); 
 
                     const intersects = raycaster.intersectObjects(targetMeshes);
                     if (intersects.length > 0 && intersects[0].distance <= 35) {
@@ -702,7 +685,7 @@
                         }
                     }
                     shotgunPelletEnds.push(endVec.clone());
-                    renderTracerTrail(startVec, endVec, 0xf59e0b); // 주황빛 궤적
+                    renderTracerTrail(startVec, endVec, 0xf59e0b); 
                 }
 
                 if (gameMode === 'match' && totalShotgunDamage > 0) {
@@ -790,6 +773,7 @@
                 });
             }
 
+            // 🔥 [버그수정] 대기실 상태 체크 로직 강화
             if (gameMode === 'lobby') {
                 yawObject.position.x = Math.max(-14, Math.min(14, yawObject.position.x));
                 yawObject.position.z = Math.max(-14, Math.min(14, yawObject.position.z));
@@ -797,6 +781,7 @@
                 const distToPad = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(padPos.x, padPos.z));
                 const standingOnPad = (distToPad < padRadius);
 
+                // 상태가 바뀔 때만 패킷을 단 한 번 전송하여 씹힘 방지
                 if (standingOnPad !== isPlayerReady) {
                     isPlayerReady = standingOnPad;
                     socket.emit('toggleReady', { isReady: isPlayerReady });
@@ -806,6 +791,7 @@
                 yawObject.position.z = Math.max(-56, Math.min(-14, yawObject.position.z));
             }
 
+            // 실시간 동기화 패킷 전송 (룸 ID 포함)
             socket.emit('playerMovement', { 
                 roomId: currentRoomId, 
                 pos: yawObject.position, 
