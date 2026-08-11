@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 줌(ADS) 기능 추가</title>
+    <title>ONLINE FPS ARENA - 재접속 버튼 추가</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -31,10 +31,18 @@
 
     <div id="damage-flash"></div>
 
+    <!-- 좌측 상단 HUD & 재접속 버튼 구역 -->
     <div class="absolute top-0 left-0 w-full p-4 flex flex-col md:flex-row gap-4 justify-between items-center md:items-start pointer-events-none z-10">
-        <div class="bg-black/70 p-3 rounded-xl border border-gray-800 shadow-2xl">
-            <div class="text-xs text-gray-500 font-bold uppercase tracking-wider">구역</div>
-            <div id="game-status" class="text-xl font-black text-amber-400">대기실 (LOBBY)</div>
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <div class="bg-black/70 p-3 rounded-xl border border-gray-800 shadow-2xl">
+                <div class="text-xs text-gray-500 font-bold uppercase tracking-wider">구역</div>
+                <div id="game-status" class="text-xl font-black text-amber-400">대기실 (LOBBY)</div>
+            </div>
+            <!-- 재접속/포인터 고정 버튼 -->
+            <button id="reconnect-btn" class="hidden bg-amber-500 hover:bg-amber-600 text-black font-extrabold py-2 px-4 rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 border border-amber-400">
+                <i class="fa-solid fa-mouse-pointer"></i>
+                <span>게임 조종 계속하기 (클릭)</span>
+            </button>
         </div>
 
         <div class="bg-black/70 p-3 rounded-xl border border-gray-800 text-center min-w-[200px] shadow-2xl">
@@ -50,6 +58,16 @@
     </div>
 
     <div id="crosshair"></div>
+
+    <!-- ESC/Tab 등으로 일시 정지 시 표시되는 중앙 안내 레이어 -->
+    <div id="pause-overlay" class="hidden absolute top-0 left-0 w-full h-full bg-black/50 backdrop-blur-sm flex flex-col justify-center items-center z-40 cursor-pointer">
+        <div class="bg-black/80 border border-amber-500/50 p-6 rounded-2xl text-center shadow-2xl max-w-sm">
+            <i class="fa-solid fa-circle-pause text-amber-400 text-4xl mb-3"></i>
+            <h2 class="text-xl font-bold text-white mb-1">일시 정지 상태</h2>
+            <p class="text-xs text-gray-300 mb-4">마우스 커서가 해제되었습니다.<br>화면이나 아래 버튼을 클릭하여 계속하세요.</p>
+            <span class="inline-block bg-amber-500 text-black text-xs font-black px-4 py-2 rounded-xl">클릭하여 화면 고정</span>
+        </div>
+    </div>
 
     <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 pointer-events-none z-10 flex flex-col gap-3">
         <div id="hp-versus-container" class="flex justify-between items-center bg-black/70 p-3 rounded-2xl border border-white/10 opacity-0 transition-opacity duration-300">
@@ -133,7 +151,8 @@
         let isPlayerReady = false;
 
         let currentWeapon = 'rifle'; 
-        let isZoomed = false; // 줌 상태 저장 변수
+        let isZoomed = false;
+        let isGameStarted = false;
 
         let player = {
             hp: 100,
@@ -158,6 +177,8 @@
 
         const startBtn = document.getElementById('start-btn');
         const introModal = document.getElementById('intro-modal');
+        const reconnectBtn = document.getElementById('reconnect-btn');
+        const pauseOverlay = document.getElementById('pause-overlay');
         
         const slotRifleEl = document.getElementById('slot-rifle');
         const slotKnifeEl = document.getElementById('slot-knife');
@@ -175,6 +196,10 @@
         const padStatusTextEl = document.getElementById('pad-status-text');
 
         let obstacles = [];
+
+        function requestLock() {
+            document.body.requestPointerLock();
+        }
 
         function updateAmmoUI() {
             if (player.mags > 0) {
@@ -225,7 +250,6 @@
             
             document.addEventListener('wheel', onWindowWheel, { passive: true });
             
-            // 마우스 클릭 및 우클릭(줌) 이벤트
             document.addEventListener('mousedown', (e) => {
                 if (!isLocked) return;
                 if (e.button === 0) player.isShooting = true;
@@ -236,19 +260,32 @@
                 if (e.button === 2) setZoomState(false);
             });
             
-            // 우클릭 기본 메뉴 방지
             document.addEventListener('contextmenu', (e) => e.preventDefault());
 
             document.addEventListener('pointerlockchange', () => { 
                 isLocked = (document.pointerLockElement === document.body); 
-                if(!isLocked) setZoomState(false);
+                if(!isLocked) {
+                    setZoomState(false);
+                    if (isGameStarted) {
+                        reconnectBtn.classList.remove('hidden');
+                        pauseOverlay.classList.remove('hidden');
+                    }
+                } else {
+                    reconnectBtn.classList.add('hidden');
+                    pauseOverlay.classList.add('hidden');
+                }
             });
 
             startBtn.addEventListener('click', () => {
-                document.body.requestPointerLock();
+                isGameStarted = true;
+                requestLock();
                 introModal.style.opacity = '0';
                 setTimeout(() => introModal.style.display = 'none', 500);
             });
+
+            // 재접속 버튼 및 오버레이 클릭 시 마우스 고정 복귀
+            reconnectBtn.addEventListener('click', requestLock);
+            pauseOverlay.addEventListener('click', requestLock);
         }
 
         function setZoomState(zoom) {
@@ -591,7 +628,7 @@
             if (currentWeapon === type || player.isReloading) return;
             currentWeapon = type;
             player.isShooting = false; 
-            setZoomState(false); // 무기 바꾸면 줌 해제
+            setZoomState(false);
 
             if (type === 'knife') {
                 rifleMesh.visible = false;
@@ -623,7 +660,6 @@
         function onMouseMove(e) {
             if (!isLocked) return;
             
-            // 줌 상태에서는 시점 회전 속도(감도) 감소
             const sensitivity = isZoomed ? 0.0008 : 0.002;
             yawObject.rotation.y -= e.movementX * sensitivity; 
             pitchObject.rotation.x -= e.movementY * sensitivity;
@@ -633,7 +669,7 @@
         function reloadPlayerWeapon() {
             if (player.mags <= 0) return;
 
-            setZoomState(false); // 재장전 시작 시 줌 해제
+            setZoomState(false);
             player.isReloading = true;
             ammoDisplayRifle.innerHTML = `<span class="text-amber-500 animate-pulse text-xs">RELOADING...</span>`;
             
@@ -661,7 +697,6 @@
 
             player.lastShotTime = now;
 
-            // 반동 애니메이션
             const recoilZ = isZoomed ? -0.28 : -0.3;
             gunContainer.position.z = recoilZ;
             setTimeout(() => gunContainer.position.z = isZoomed ? -0.25 : -0.4, 60);
@@ -726,7 +761,6 @@
         }
 
         function updateMainLoopAndPhysics() {
-            // 카메라 FOV 및 무기 Position smooth 애니메이션 (ADS/줌 효과)
             const targetFov = isZoomed ? 45 : 75;
             const targetGunX = isZoomed ? 0.0 : 0.25;
             const targetGunY = isZoomed ? -0.12 : -0.2;
@@ -764,7 +798,6 @@
             rotatedDir.y = 0; 
             rotatedDir.normalize();
 
-            // 줌 상태 시 이동 속도 50% 감속
             const speed = isZoomed ? (PLAYER_SPEED * 0.5) : PLAYER_SPEED;
             yawObject.position.addScaledVector(rotatedDir, speed);
 
