@@ -2,14 +2,14 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 다리 및 이동 모션 추가</title>
+    <title>ONLINE FPS ARENA - 줌(ADS) 기능 추가</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
         body { margin: 0; overflow: hidden; user-select: none; font-family: 'Pretendard', 'Noto Sans KR', sans-serif; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; transition: transform 0.1s ease-out; }
         #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.9); }
         #crosshair::before { top: 4px; left: -5px; width: 20px; height: 2px; }
         #crosshair::after { top: -5px; left: 4px; width: 2px; height: 20px; }
@@ -66,7 +66,7 @@
 
         <div class="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4">
             <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300 self-start sm:self-auto">
-                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">휠 스크롤</span>: 무기 교체 | <span class="text-amber-400 font-bold">R</span>: 라이플 장전 | <span class="text-amber-400 font-bold">클릭</span>: 공격
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">우클릭</span>: 조준(줌) | <span class="text-amber-400 font-bold">휠</span>: 무기 교체 | <span class="text-amber-400 font-bold">R</span>: 장전
             </div>
             
             <div class="flex gap-2 pointer-events-none">
@@ -133,6 +133,7 @@
         let isPlayerReady = false;
 
         let currentWeapon = 'rifle'; 
+        let isZoomed = false; // 줌 상태 저장 변수
 
         let player = {
             hp: 100,
@@ -224,15 +225,35 @@
             
             document.addEventListener('wheel', onWindowWheel, { passive: true });
             
-            document.addEventListener('mousedown', (e) => { if (isLocked && e.button === 0) player.isShooting = true; });
-            document.addEventListener('mouseup', (e) => { if (e.button === 0) player.isShooting = false; });
-            document.addEventListener('pointerlockchange', () => { isLocked = (document.pointerLockElement === document.body); });
+            // 마우스 클릭 및 우클릭(줌) 이벤트
+            document.addEventListener('mousedown', (e) => {
+                if (!isLocked) return;
+                if (e.button === 0) player.isShooting = true;
+                if (e.button === 2 && currentWeapon === 'rifle') setZoomState(true);
+            });
+            document.addEventListener('mouseup', (e) => {
+                if (e.button === 0) player.isShooting = false;
+                if (e.button === 2) setZoomState(false);
+            });
+            
+            // 우클릭 기본 메뉴 방지
+            document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            document.addEventListener('pointerlockchange', () => { 
+                isLocked = (document.pointerLockElement === document.body); 
+                if(!isLocked) setZoomState(false);
+            });
 
             startBtn.addEventListener('click', () => {
                 document.body.requestPointerLock();
                 introModal.style.opacity = '0';
                 setTimeout(() => introModal.style.display = 'none', 500);
             });
+        }
+
+        function setZoomState(zoom) {
+            if (currentWeapon !== 'rifle') zoom = false;
+            isZoomed = zoom;
         }
 
         function setupNetworkingEvents() {
@@ -248,7 +269,6 @@
                 if (otherPlayers[playerInfo.id]) {
                     const targetGroup = otherPlayers[playerInfo.id];
                     
-                    // 위치 변화 감지하여 걷기 애니메이션 적용
                     const isMoving = targetGroup.position.distanceTo(playerInfo.pos) > 0.01;
                     targetGroup.position.copy(playerInfo.pos);
                     targetGroup.rotation.y = playerInfo.rotY;
@@ -466,25 +486,21 @@
             scene.add(padMesh);
         }
 
-        // 플레이어 다리 및 조인트 구조 생성 함수
         function spawnOtherPlayerMesh(id, pos) {
             if (otherPlayers[id]) return;
 
             const group = new THREE.Group();
             
-            // 몸통
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.0, 0.6), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
             body.position.y = 1.3;
             body.castShadow = true;
             group.add(body);
             
-            // 머리
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
             head.position.y = 2.1;
             head.castShadow = true;
             group.add(head);
 
-            // 좌/우 다리 (회전 축을 위해 Pivot 피벗 그룹 활용)
             const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
             const legGeo = new THREE.BoxGeometry(0.35, 0.8, 0.4);
 
@@ -506,7 +522,6 @@
             rightLegPivot.name = "rightLeg";
             group.add(rightLegPivot);
 
-            // 무기 렌더링
             const enemyRifle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.15, 0.9), new THREE.MeshStandardMaterial({ color: 0x475569 }));
             enemyRifle.position.set(0.4, 1.3, -0.4);
             enemyRifle.name = "enemyWeapon_rifle";
@@ -576,6 +591,7 @@
             if (currentWeapon === type || player.isReloading) return;
             currentWeapon = type;
             player.isShooting = false; 
+            setZoomState(false); // 무기 바꾸면 줌 해제
 
             if (type === 'knife') {
                 rifleMesh.visible = false;
@@ -603,16 +619,21 @@
             }
         }
         function onKeyUp(e) { keys[e.code] = false; }
+        
         function onMouseMove(e) {
             if (!isLocked) return;
-            yawObject.rotation.y -= e.movementX * 0.002; 
-            pitchObject.rotation.x -= e.movementY * 0.002;
+            
+            // 줌 상태에서는 시점 회전 속도(감도) 감소
+            const sensitivity = isZoomed ? 0.0008 : 0.002;
+            yawObject.rotation.y -= e.movementX * sensitivity; 
+            pitchObject.rotation.x -= e.movementY * sensitivity;
             pitchObject.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchObject.rotation.x));
         }
 
         function reloadPlayerWeapon() {
             if (player.mags <= 0) return;
 
+            setZoomState(false); // 재장전 시작 시 줌 해제
             player.isReloading = true;
             ammoDisplayRifle.innerHTML = `<span class="text-amber-500 animate-pulse text-xs">RELOADING...</span>`;
             
@@ -640,8 +661,10 @@
 
             player.lastShotTime = now;
 
-            gunContainer.position.z = -0.3;
-            setTimeout(() => gunContainer.position.z = -0.4, 60);
+            // 반동 애니메이션
+            const recoilZ = isZoomed ? -0.28 : -0.3;
+            gunContainer.position.z = recoilZ;
+            setTimeout(() => gunContainer.position.z = isZoomed ? -0.25 : -0.4, 60);
 
             if (currentWeapon === 'rifle') {
                 player.ammo--;
@@ -703,6 +726,19 @@
         }
 
         function updateMainLoopAndPhysics() {
+            // 카메라 FOV 및 무기 Position smooth 애니메이션 (ADS/줌 효과)
+            const targetFov = isZoomed ? 45 : 75;
+            const targetGunX = isZoomed ? 0.0 : 0.25;
+            const targetGunY = isZoomed ? -0.12 : -0.2;
+            const targetGunZ = isZoomed ? -0.25 : -0.4;
+
+            camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.15);
+            camera.updateProjectionMatrix();
+
+            gunContainer.position.x = THREE.MathUtils.lerp(gunContainer.position.x, targetGunX, 0.2);
+            gunContainer.position.y = THREE.MathUtils.lerp(gunContainer.position.y, targetGunY, 0.2);
+            gunContainer.position.z = THREE.MathUtils.lerp(gunContainer.position.z, targetGunZ, 0.2);
+
             if (!player.isGrounded) {
                 player.velocity.y -= GRAVITY; 
                 yawObject.position.y += player.velocity.y;
@@ -727,7 +763,10 @@
             const rotatedDir = moveDir.clone().applyQuaternion(yawObject.quaternion);
             rotatedDir.y = 0; 
             rotatedDir.normalize();
-            yawObject.position.addScaledVector(rotatedDir, PLAYER_SPEED);
+
+            // 줌 상태 시 이동 속도 50% 감속
+            const speed = isZoomed ? (PLAYER_SPEED * 0.5) : PLAYER_SPEED;
+            yawObject.position.addScaledVector(rotatedDir, speed);
 
             if (gameMode === 'match') {
                 obstacles.forEach(obs => {
