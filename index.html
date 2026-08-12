@@ -69,9 +69,9 @@
         </div>
     </div>
 
-    <!-- 중앙 카운트다운 타이머 -->
-    <div id="match-timer-display" class="hidden absolute top-20 left-1/2 -translate-x-1/2 text-6xl font-black z-30 pointer-events-none drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">
-        3
+    <!-- 중앙 카운트다운 타이머 (z-60 설정으로 무기 선택 모달 위로 배치) -->
+    <div id="match-timer-display" class="hidden absolute top-20 left-1/2 -translate-x-1/2 text-6xl font-black z-60 pointer-events-none drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">
+        5
     </div>
 
     <div id="crosshair"></div>
@@ -163,7 +163,7 @@
 
     <!-- 매칭 성공 시 무기 선택 모달 -->
     <div id="weapon-select-modal" class="hidden absolute top-0 left-0 w-full h-full bg-black/80 backdrop-blur-md flex justify-center items-center z-50 p-6 pointer-events-auto">
-        <div class="bg-gray-900 border border-sky-500/50 rounded-3xl p-6 w-full max-w-2xl text-center shadow-2xl flex flex-col gap-5">
+        <div class="bg-gray-900 border border-sky-500/50 rounded-3xl p-6 w-full max-w-2xl text-center shadow-2xl flex flex-col gap-5 mt-12">
             <div>
                 <h2 class="text-2xl font-black text-sky-400">결투장에 입장했습니다!</h2>
                 <p class="text-xs text-gray-300 mt-1">이번 대결에서 사용할 <span class="text-amber-400 font-bold">무기 2개</span>를 선택하세요.</p>
@@ -280,6 +280,9 @@
         let myRole = null;
         let opponentId = null;
         let isPlayerReady = false;
+
+        // 카운트다운 제한 플래그
+        let isCountdownActive = false;
 
         // 선택된 무기 2개 관리
         let selectedWeapons = ['rifle', 'pistol']; 
@@ -418,7 +421,7 @@
             document.addEventListener('wheel', onWindowWheel, { passive: true });
             
             document.addEventListener('mousedown', (e) => {
-                if (!isLocked) return;
+                if (!isLocked || isCountdownActive) return;
                 if (e.button === 0) player.isShooting = true;
                 if (e.button === 2 && getCurrentWeaponType() !== 'knife') setZoomState(true);
             });
@@ -499,9 +502,13 @@
         }
 
         function startMatchCountdown() {
+            isCountdownActive = true; // 이동 및 총 발사 차단 활성화
+            player.isShooting = false;
+            
             matchTimerDisplay.classList.remove('hidden', 'timer-blink-red');
             matchTimerDisplay.classList.add('text-amber-400');
-            let count = 3;
+            
+            let count = 5; // 5초 카운트다운 변경
             matchTimerDisplay.innerText = count;
 
             const timerInterval = setInterval(() => {
@@ -513,6 +520,11 @@
                     matchTimerDisplay.classList.remove('text-amber-400');
                     matchTimerDisplay.classList.add('timer-blink-red');
                     clearInterval(timerInterval);
+                    
+                    setTimeout(() => {
+                        matchTimerDisplay.classList.add('hidden');
+                        isCountdownActive = false; // 카운트다운 종료 후 이동/사격 가능
+                    }, 800);
                 }
             }, 1000);
         }
@@ -649,6 +661,7 @@
 
             socket.on('gameResult', (result) => {
                 gameMode = 'lobby';
+                isCountdownActive = false;
                 versusContainer.classList.add('opacity-0');
                 matchTimerDisplay.classList.add('hidden');
                 weaponSelectModal.classList.add('hidden');
@@ -871,7 +884,7 @@
         }
 
         function triggerSliding() {
-            if (isSliding || !player.isGrounded) return;
+            if (isSliding || !player.isGrounded || isCountdownActive) return;
 
             const moveDir = new THREE.Vector3();
             if (keys['KeyW']) moveDir.z -= 1;
@@ -898,7 +911,7 @@
 
             if (e.code === 'KeyC' && isLocked) triggerSliding();
 
-            if (e.code === 'Space' && player.isGrounded && isLocked) {
+            if (e.code === 'Space' && player.isGrounded && isLocked && !isCountdownActive) {
                 player.velocity.y = JUMP_FORCE;
                 player.isGrounded = false;
                 if (isSliding) isSliding = false; 
@@ -938,7 +951,7 @@
         }
 
         function handleWeaponShooting() {
-            if (!isLocked) return;
+            if (!isLocked || isCountdownActive) return; // 카운트다운 활성화 중이면 사격 불가
             const currentW = getCurrentWeaponType();
             const wData = weaponsData[currentW];
 
@@ -1052,24 +1065,27 @@
 
             if (!isLocked) return;
 
-            if (isSliding) {
-                yawObject.position.addScaledVector(slidingDir, PLAYER_SPEED * 1.8);
-                slidingTimer--;
-                if (slidingTimer <= 0) isSliding = false;
-            } else {
-                const moveDir = new THREE.Vector3();
-                if (keys['KeyW']) moveDir.z -= 1;
-                if (keys['KeyS']) moveDir.z += 1;
-                if (keys['KeyA']) moveDir.x -= 1;
-                if (keys['KeyD']) moveDir.x += 1;
-                moveDir.normalize();
+            // 카운트다운 활성화 중에는 WASD 이동 및 슬라이딩 무시
+            if (!isCountdownActive) {
+                if (isSliding) {
+                    yawObject.position.addScaledVector(slidingDir, PLAYER_SPEED * 1.8);
+                    slidingTimer--;
+                    if (slidingTimer <= 0) isSliding = false;
+                } else {
+                    const moveDir = new THREE.Vector3();
+                    if (keys['KeyW']) moveDir.z -= 1;
+                    if (keys['KeyS']) moveDir.z += 1;
+                    if (keys['KeyA']) moveDir.x -= 1;
+                    if (keys['KeyD']) moveDir.x += 1;
+                    moveDir.normalize();
 
-                const rotatedDir = moveDir.clone().applyQuaternion(yawObject.quaternion);
-                rotatedDir.y = 0; 
-                rotatedDir.normalize();
+                    const rotatedDir = moveDir.clone().applyQuaternion(yawObject.quaternion);
+                    rotatedDir.y = 0; 
+                    rotatedDir.normalize();
 
-                const speed = isZoomed ? (PLAYER_SPEED * 0.5) : PLAYER_SPEED;
-                yawObject.position.addScaledVector(rotatedDir, speed);
+                    const speed = isZoomed ? (PLAYER_SPEED * 0.5) : PLAYER_SPEED;
+                    yawObject.position.addScaledVector(rotatedDir, speed);
+                }
             }
 
             if (gameMode === 'match') {
