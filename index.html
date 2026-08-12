@@ -1,55 +1,507 @@
-from pathlib import Path
-import re, json, textwrap, zipfile, os
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>ONLINE FPS ARENA - 무기 선택 및 한글화 업데이트</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        body { margin: 0; overflow: hidden; user-select: none; font-family: 'Pretendard', 'Noto Sans KR', sans-serif; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; transition: transform 0.1s ease-out; }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.9); }
+        #crosshair::before { top: 4px; left: -5px; width: 20px; height: 2px; }
+        #crosshair::after { top: -5px; left: 4px; width: 2px; height: 20px; }
+        #damage-flash { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; transition: all 0.1s; z-index: 5; }
+        .hit { background-color: rgba(239, 68, 68, 0.4); border: 15px solid rgba(239, 68, 68, 0.6); }
+        
+        .weapon-slot-active {
+            border-color: #f59e0b !important;
+            background-color: rgba(245, 158, 11, 0.15) !important;
+            box-shadow: inset 0 0 15px rgba(245, 158, 11, 0.3), 0 0 15px rgba(245, 158, 11, 0.2);
+        }
+        .weapon-slot-active i {
+            color: #f59e0b !important;
+            filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6));
+        }
 
-src = Path("/mnt/data/game!!.txt").read_text(encoding="utf-8")
+        .weapon-select-card.selected {
+            border-color: #38bdf8 !important;
+            background-color: rgba(56, 189, 248, 0.2) !important;
+        }
 
-# We'll build a revised client by targeted replacements against the uploaded source.
-html = src
+        @keyframes blink-red {
+            0%, 100% { color: #ef4444; opacity: 1; transform: scale(1.2); }
+            50% { opacity: 0.3; transform: scale(1); }
+        }
+        .timer-blink-red {
+            animation: blink-red 0.5s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
 
-# 1) Use same-origin Socket.IO so the client works with the included server.
-html = html.replace(
-    "const socket = io('https://online-fps-server.onrender.com');",
-    "const socket = io();"
-)
+    <div id="damage-flash"></div>
 
-# 2) Add network/combat state variables after isGameStarted.
-html = html.replace(
-    "let isZoomed = false;\n        let isGameStarted = false;",
-    """let isZoomed = false;
+    <!-- 좌측 상단 HUD & 재접속 버튼 구역 -->
+    <div class="absolute top-0 left-0 w-full p-4 flex flex-col md:flex-row gap-4 justify-between items-center md:items-start pointer-events-none z-10">
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <div class="bg-black/70 p-3 rounded-xl border border-gray-800 shadow-2xl">
+                <div class="text-xs text-gray-500 font-bold uppercase tracking-wider">구역</div>
+                <div id="game-status" class="text-xl font-black text-amber-400">대기실 (LOBBY)</div>
+            </div>
+            <button id="reconnect-btn" class="hidden bg-amber-500 hover:bg-amber-600 text-black font-extrabold py-2 px-4 rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 border border-amber-400">
+                <i class="fa-solid fa-mouse-pointer"></i>
+                <span>게임 조종 계속하기 (클릭)</span>
+            </button>
+        </div>
+
+        <div class="bg-black/70 p-3 rounded-xl border border-gray-800 text-center min-w-[200px] shadow-2xl">
+            <div class="text-xs text-gray-400 font-bold uppercase tracking-wider">1v1 배틀 패드 상태</div>
+            <div id="pad-status-text" class="text-lg font-black text-green-400">대기 중 (0 / 2)</div>
+            <div class="text-[10px] text-gray-500">노란 발판 위로 올라가면 매칭이 수락됩니다.</div>
+        </div>
+
+        <div class="bg-black/70 p-3 rounded-xl border border-gray-800 text-right shadow-2xl">
+            <div class="text-xs text-gray-500 font-bold tracking-wider">내 전적</div>
+            <div class="text-xl font-black text-white"><span id="score-win" class="text-green-400">0</span>승 <span id="score-lose" class="text-red-400">0</span>패</div>
+        </div>
+    </div>
+
+    <!-- 중앙 카운트다운 타이머 -->
+    <div id="match-timer-display" class="hidden absolute top-20 left-1/2 -translate-x-1/2 text-6xl font-black z-30 pointer-events-none drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">
+        3
+    </div>
+
+    <div id="crosshair"></div>
+
+    <!-- 대형 인벤토리 & 일시정지 오버레이 -->
+    <div id="pause-overlay" class="hidden absolute top-0 left-0 w-full h-full bg-black/70 backdrop-blur-md flex justify-center items-center z-40 p-6">
+        <div class="bg-gray-900/90 border border-amber-500/40 rounded-3xl w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col justify-between p-6 relative">
+            
+            <div class="flex justify-between items-center border-b border-gray-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-boxes-stacked text-amber-400 text-2xl"></i>
+                    <div>
+                        <h2 class="text-xl font-black text-white">인벤토리 (일시정지)</h2>
+                        <p class="text-xs text-gray-400">화면을 클릭하거나 오른쪽 상단 X 버튼을 누르면 게임으로 돌아갑니다.</p>
+                    </div>
+                </div>
+                <button id="inventory-close-btn" class="bg-gray-800 hover:bg-rose-600 text-gray-400 hover:text-white w-10 h-10 rounded-full transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- 소유 목록 -->
+            <div class="flex-1 my-4 overflow-y-auto pr-2 flex flex-col gap-3">
+                <div class="text-xs text-amber-400 font-bold uppercase tracking-wider mb-1">소유 목록</div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <i class="fa-solid fa-gun text-amber-400 text-2xl"></i>
+                            <div>
+                                <div class="text-sm font-bold text-white">돌격소총</div>
+                                <div class="text-xs text-gray-400">주무기 | 균형 잡힌 높은 연사력</div>
+                            </div>
+                        </div>
+                        <span class="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
+                    </div>
+
+                    <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <i class="fa-solid fa-hand-holding-hand text-blue-400 text-2xl"></i>
+                            <div>
+                                <div class="text-sm font-bold text-white">권총</div>
+                                <div class="text-xs text-gray-400">보조무기 | 단발 사격 / 데미지 10</div>
+                            </div>
+                        </div>
+                        <span class="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
+                    </div>
+
+                    <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <i class="fa-solid fa-crosshairs text-purple-400 text-2xl"></i>
+                            <div>
+                                <div class="text-sm font-bold text-white">저격소총</div>
+                                <div class="text-xs text-gray-400">특수무기 | 몸통 34 / Headshot 100</div>
+                            </div>
+                        </div>
+                        <span class="text-xs bg-purple-500/20 text-purple-400 border border-purple-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
+                    </div>
+
+                    <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <i class="fa-solid fa-screwdriver-wrench rotate-45 text-rose-400 text-2xl"></i>
+                            <div>
+                                <div class="text-sm font-bold text-white">칼</div>
+                                <div class="text-xs text-gray-400">근접무기 | 무제한 공격</div>
+                            </div>
+                        </div>
+                        <span class="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
+                    </div>
+                </div>
+
+                <!-- 하단 여유 보관함 공간 -->
+                <div class="mt-4 border-t border-gray-800 pt-4">
+                    <div class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">추후 확장 보관함 공간</div>
+                    <div class="grid grid-cols-4 gap-3">
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="resume-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-black font-black py-3 rounded-2xl text-sm transition-all active:scale-95 shadow-lg">
+                게임 계속하기 (화면 클릭)
+            </button>
+        </div>
+    </div>
+
+    <!-- 매칭 성공 시 무기 선택 모달 -->
+    <div id="weapon-select-modal" class="hidden absolute top-0 left-0 w-full h-full bg-black/80 backdrop-blur-md flex justify-center items-center z-50 p-6 pointer-events-auto">
+        <div class="bg-gray-900 border border-sky-500/50 rounded-3xl p-6 w-full max-w-2xl text-center shadow-2xl flex flex-col gap-5">
+            <div>
+                <h2 class="text-2xl font-black text-sky-400">결투장에 입장했습니다!</h2>
+                <p class="text-xs text-gray-300 mt-1">이번 대결에서 사용할 <span class="text-amber-400 font-bold">무기 2개</span>를 선택하세요.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="rifle">
+                    <i class="fa-solid fa-gun text-amber-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">돌격소총</div>
+                        <div class="text-[10px] text-gray-400">장탄수 30발</div>
+                    </div>
+                </div>
+
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="pistol">
+                    <i class="fa-solid fa-hand-holding-hand text-blue-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">권총</div>
+                        <div class="text-[10px] text-gray-400">장탄수 4발 (단발)</div>
+                    </div>
+                </div>
+
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="sniper">
+                    <i class="fa-solid fa-crosshairs text-purple-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">저격소총</div>
+                        <div class="text-[10px] text-gray-400">장탄수 1발 (Headshot 100)</div>
+                    </div>
+                </div>
+
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="knife">
+                    <i class="fa-solid fa-screwdriver-wrench rotate-45 text-rose-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">칼</div>
+                        <div class="text-[10px] text-gray-400">근접 무기</div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="confirm-weapons-btn" disabled class="w-full bg-gray-700 text-gray-400 font-extrabold py-3 rounded-2xl text-sm transition-all shadow-lg">
+                무기 2개 선택 완료 (0/2)
+            </button>
+        </div>
+    </div>
+
+    <!-- 하단 HUD -->
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 pointer-events-none z-10 flex flex-col gap-3">
+        <div id="hp-versus-container" class="flex justify-between items-center bg-black/70 p-3 rounded-2xl border border-white/10 opacity-0 transition-opacity duration-300">
+            <div class="w-2/5">
+                <div class="flex justify-between text-xs font-bold mb-1"><span class="text-blue-400">나</span> <span id="my-hp-text">100 HP</span></div>
+                <div class="w-full bg-gray-800 h-3 rounded-full overflow-hidden"><div id="my-hp-bar" class="bg-blue-500 h-full w-full"></div></div>
+            </div>
+            <div class="font-black italic text-rose-500 text-2xl tracking-tighter">VS</div>
+            <div class="w-2/5 text-right">
+                <div class="flex justify-between text-xs font-bold mb-1 flex-row-reverse"><span class="text-red-400">상대</span> <span id="enemy-hp-text">100 HP</span></div>
+                <div class="w-full bg-gray-800 h-3 rounded-full overflow-hidden"><div id="enemy-hp-bar" class="bg-red-500 h-full w-full float-right"></div></div>
+            </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4">
+            <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300 self-start sm:self-auto">
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">C</span>: 슬라이딩 | <span class="text-amber-400 font-bold">우클릭</span>: 줌 | <span class="text-amber-400 font-bold">휠/숫자1~2</span>: 무기교체
+            </div>
+            
+            <div class="flex gap-2 pointer-events-none">
+                <!-- 무기 슬롯 1 -->
+                <div id="slot-1" class="bg-black/80 px-4 py-2 rounded-xl border-2 border-gray-700 min-w-[150px] flex items-center justify-between transition-all duration-200 weapon-slot-active">
+                    <div class="flex flex-col items-start">
+                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">1번 무기</div>
+                        <div class="text-xs font-extrabold text-white mt-0.5" id="slot-1-name">돌격소총</div>
+                        <div class="text-sm font-black text-amber-400 mt-1 tabular-nums" id="slot-1-ammo">30/30 (3)</div>
+                    </div>
+                </div>
+
+                <!-- 무기 슬롯 2 -->
+                <div id="slot-2" class="bg-black/80 px-4 py-2 rounded-xl border-2 border-gray-700 min-w-[150px] flex items-center justify-between transition-all duration-200">
+                    <div class="flex flex-col items-start">
+                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">2번 무기</div>
+                        <div class="text-xs font-extrabold text-white mt-0.5" id="slot-2-name">권총</div>
+                        <div class="text-sm font-black text-gray-400 mt-1 tabular-nums" id="slot-2-ammo">4/4 (3)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="intro-modal" class="absolute top-0 left-0 w-full h-full bg-black/95 flex flex-col justify-center items-center z-50 transition-opacity duration-500">
+        <h1 class="text-5xl font-black text-amber-500 mb-8 tracking-wider">ONLINE FPS ARENA</h1>
+        <button id="start-btn" class="bg-amber-500 hover:bg-amber-600 text-black font-extrabold py-4 px-10 rounded-2xl text-xl transition-all active:scale-95 pointer-events-auto shadow-lg">
+            게임 서버 접속하기
+        </button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        const socket = io('https://online-fps-server.onrender.com'); 
+
+        const PLAYER_SPEED = 0.12;
+        const JUMP_FORCE = 0.08;
+        const GRAVITY = 0.0035;
+        const PLAYER_HEIGHT = 1.6;
+        
+        let scene, camera, renderer;
+        let keys = {};
+        let otherPlayers = {}; 
+        
+        let padMesh;
+        const padRadius = 2.0;
+        const padPos = { x: 0, z: 4 }; 
+        
+        let gameMode = 'lobby'; 
+        let currentRoomId = null; 
+        let myRole = null;
+        let opponentId = null;
+        let isPlayerReady = false;
+
+        // 선택된 무기 2개 관리
+        let selectedWeapons = ['rifle', 'pistol']; 
+        let activeSlotIndex = 0; // 0: slot 1, 1: slot 2
+        let tempSelectedWeapons = [];
+
+        let isZoomed = false;
         let isGameStarted = false;
 
-        // 개선된 라운드/네트워크 상태
-        let combatEnabled = false;       // 카운트다운 종료 전 이동/사격 잠금
-        let weaponSelectionConfirmed = false;
-        let movementSendTimer = 0;
-        const MOVEMENT_SEND_INTERVAL = 50; // 20Hz 전송
-        let lastSentMove = { x: null, y: null, z: null, rotY: null, weapon: null };"""
-)
+        // 슬라이딩
+        let isSliding = false;
+        let slidingTimer = 0;
+        let slidingDir = new THREE.Vector3();
 
-# 3) Add disconnect/connect UI handling near networking function start
-html = html.replace(
-    "function setupNetworkingEvents() {\n            socket.on('currentPlayers'",
-    """function setupNetworkingEvents() {
-            socket.on('connect', () => {
-                reconnectBtn.classList.add('hidden');
+        // 한글 이름 매핑
+        const weaponKoreanNames = {
+            rifle: '돌격소총',
+            pistol: '권총',
+            sniper: '저격소총',
+            knife: '칼'
+        };
+
+        const weaponsData = {
+            rifle:  { ammo: 30, maxAmmo: 30, mags: 3, maxMags: 3, isReloading: false, delay: 100, damage: 6.7 },
+            pistol: { ammo: 4,  maxAmmo: 4,  mags: 3, maxMags: 3, isReloading: false, delay: 600, damage: 10.0 },
+            sniper: { ammo: 1,  maxAmmo: 1,  mags: 3, maxMags: 3, isReloading: false, delay: 1000, damageBody: 34.0, damageHead: 100.0 },
+            knife:  { damage: 35.0, range: 2.5, delay: 250 }
+        };
+
+        let player = {
+            hp: 100,
+            pos: new THREE.Vector3(0, PLAYER_HEIGHT, 12), 
+            velocity: new THREE.Vector3(),
+            isGrounded: true,
+            isShooting: false,
+            lastShotTime: 0
+        };
+
+        let gunContainer; 
+        let rifleMesh, pistolMesh, sniperMesh, knifeMesh;
+        let isLocked = false;
+        const pitchObject = new THREE.Object3D();
+        const yawObject = new THREE.Object3D();
+
+        const startBtn = document.getElementById('start-btn');
+        const introModal = document.getElementById('intro-modal');
+        const reconnectBtn = document.getElementById('reconnect-btn');
+        const pauseOverlay = document.getElementById('pause-overlay');
+        const inventoryCloseBtn = document.getElementById('inventory-close-btn');
+        const resumeBtn = document.getElementById('resume-btn');
+
+        const weaponSelectModal = document.getElementById('weapon-select-modal');
+        const confirmWeaponsBtn = document.getElementById('confirm-weapons-btn');
+        const matchTimerDisplay = document.getElementById('match-timer-display');
+
+        const myHpBar = document.getElementById('my-hp-bar');
+        const myHpText = document.getElementById('my-hp-text');
+        const enemyHpBar = document.getElementById('enemy-hp-bar');
+        const enemyHpText = document.getElementById('enemy-hp-text');
+        const versusContainer = document.getElementById('hp-versus-container');
+        const gameStatusEl = document.getElementById('game-status');
+        const damageFlashEl = document.getElementById('damage-flash');
+        const scoreWinEl = document.getElementById('score-win');
+        const scoreLoseEl = document.getElementById('score-lose');
+        const padStatusTextEl = document.getElementById('pad-status-text');
+
+        let obstacles = [];
+
+        function requestLock() {
+            document.body.requestPointerLock();
+        }
+
+        function updateAmmoUI() {
+            [0, 1].forEach(idx => {
+                const wType = selectedWeapons[idx];
+                const nameEl = document.getElementById(`slot-${idx+1}-name`);
+                const ammoEl = document.getElementById(`slot-${idx+1}-ammo`);
+                
+                nameEl.innerText = weaponKoreanNames[wType];
+
+                if (wType === 'knife') {
+                    ammoEl.innerText = '무제한';
+                } else {
+                    const data = weaponsData[wType];
+                    if (data.mags > 0) {
+                        ammoEl.innerText = `${data.ammo}/${data.maxAmmo} (${data.mags})`;
+                    } else {
+                        ammoEl.innerText = `${data.ammo}/${data.maxAmmo} (소진)`;
+                    }
+                }
+            });
+        }
+
+        function getCurrentWeaponType() {
+            return selectedWeapons[activeSlotIndex];
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a); 
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.012); 
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            pitchObject.add(camera);
+            yawObject.add(pitchObject);
+            yawObject.position.copy(player.pos);
+            scene.add(yawObject);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; 
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0x404040, 0.6)); 
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 30, 10);
+            dirLight.castShadow = true; 
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            scene.add(dirLight);
+
+            const lobbyLight = new THREE.PointLight(0xf59e0b, 1, 15);
+            lobbyLight.position.set(0, 4, 10);
+            scene.add(lobbyLight);
+
+            buildLobbyAndArena();
+            createFpsWeapons(); 
+            setupNetworkingEvents();
+
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('wheel', onWindowWheel, { passive: true });
+            
+            document.addEventListener('mousedown', (e) => {
+                if (!isLocked) return;
+                if (e.button === 0) player.isShooting = true;
+                if (e.button === 2 && getCurrentWeaponType() !== 'knife') setZoomState(true);
+            });
+            document.addEventListener('mouseup', (e) => {
+                if (e.button === 0) player.isShooting = false;
+                if (e.button === 2) setZoomState(false);
+            });
+            
+            document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            document.addEventListener('pointerlockchange', () => { 
+                isLocked = (document.pointerLockElement === document.body); 
+                if(!isLocked) {
+                    setZoomState(false);
+                    if (isGameStarted && weaponSelectModal.classList.contains('hidden')) {
+                        reconnectBtn.classList.remove('hidden');
+                        pauseOverlay.classList.remove('hidden');
+                    }
+                } else {
+                    reconnectBtn.classList.add('hidden');
+                    pauseOverlay.classList.add('hidden');
+                }
             });
 
-            socket.on('disconnect', () => {
-                combatEnabled = false;
-                isPlayerReady = false;
-                showResultAlert("서버 연결이 끊어졌습니다.", "text-orange-400");
+            startBtn.addEventListener('click', () => {
+                isGameStarted = true;
+                requestLock();
+                introModal.style.opacity = '0';
+                setTimeout(() => introModal.style.display = 'none', 500);
             });
 
-            socket.on('currentPlayers'"""
-)
+            reconnectBtn.addEventListener('click', requestLock);
+            resumeBtn.addEventListener('click', requestLock);
+            inventoryCloseBtn.addEventListener('click', requestLock);
+            pauseOverlay.addEventListener('click', (e) => {
+                if (e.target === pauseOverlay) requestLock();
+            });
 
-# 4) Replace countdown so it waits for BOTH server readiness and actually enables combat on server event.
-countdown_old = re.search(r"""        function startMatchCountdown\(\) \{.*?        \}\n\n        function setZoomState""", html, re.S)
-if countdown_old:
-    html = html[:countdown_old.start()] + """        function startMatchCountdown(startAt = 3) {
+            setupWeaponSelectionUI();
+        }
+
+        function setupWeaponSelectionUI() {
+            const cards = document.querySelectorAll('.weapon-select-card');
+            cards.forEach(card => {
+                card.addEventListener('click', () => {
+                    const wType = card.dataset.weapon;
+                    if (tempSelectedWeapons.includes(wType)) {
+                        tempSelectedWeapons = tempSelectedWeapons.filter(w => w !== wType);
+                        card.classList.remove('selected');
+                    } else {
+                        if (tempSelectedWeapons.length < 2) {
+                            tempSelectedWeapons.push(wType);
+                            card.classList.add('selected');
+                        }
+                    }
+
+                    if (tempSelectedWeapons.length === 2) {
+                        confirmWeaponsBtn.disabled = false;
+                        confirmWeaponsBtn.className = "w-full bg-amber-500 hover:bg-amber-600 text-black font-black py-3 rounded-2xl text-sm transition-all active:scale-95 shadow-lg cursor-pointer";
+                        confirmWeaponsBtn.innerText = "선택 완료하고 전투 시작";
+                    } else {
+                        confirmWeaponsBtn.disabled = true;
+                        confirmWeaponsBtn.className = "w-full bg-gray-700 text-gray-400 font-extrabold py-3 rounded-2xl text-sm transition-all shadow-lg";
+                        confirmWeaponsBtn.innerText = `무기 2개 선택 완료 (${tempSelectedWeapons.length}/2)`;
+                    }
+                });
+            });
+
+            confirmWeaponsBtn.addEventListener('click', () => {
+                if (tempSelectedWeapons.length === 2) {
+                    selectedWeapons = [...tempSelectedWeapons];
+                    weaponSelectModal.classList.add('hidden');
+                    swapToSlot(0);
+                    updateAmmoUI();
+                    requestLock();
+                }
+            });
+        }
+
+        function startMatchCountdown() {
             matchTimerDisplay.classList.remove('hidden', 'timer-blink-red');
             matchTimerDisplay.classList.add('text-amber-400');
-            let count = startAt;
+            let count = 3;
             matchTimerDisplay.innerText = count;
 
             const timerInterval = setInterval(() => {
@@ -57,633 +509,635 @@ if countdown_old:
                 if (count > 0) {
                     matchTimerDisplay.innerText = count;
                 } else if (count === 0) {
-                    matchTimerDisplay.innerText = 'GO!';
+                    matchTimerDisplay.innerText = '0';
                     matchTimerDisplay.classList.remove('text-amber-400');
                     matchTimerDisplay.classList.add('timer-blink-red');
                     clearInterval(timerInterval);
-                    setTimeout(() => matchTimerDisplay.classList.add('hidden'), 700);
                 }
             }, 1000);
         }
 
-        function setZoomState""" + html[countdown_old.end():]
+        function setZoomState(zoom) {
+            if (getCurrentWeaponType() === 'knife') zoom = false;
+            isZoomed = zoom;
+        }
 
-# 5) weapon confirm now sends ready, does not locally start countdown
-html = html.replace(
-    """                    weaponSelectModal.classList.add('hidden');
-                    swapToSlot(0);
-                    updateAmmoUI();
-                    requestLock();""",
-    """                    weaponSelectModal.classList.add('hidden');
-                    swapToSlot(0);
-                    updateAmmoUI();
-                    weaponSelectionConfirmed = true;
-                    combatEnabled = false;
-                    socket.emit('weaponsSelected', {
-                        roomId: currentRoomId,
-                        weapons: selectedWeapons
-                    });
-                    requestLock();"""
-)
-
-# 6) On match found disable combat and don't start countdown immediately
-html = html.replace(
-    """                gameMode = 'match';""",
-    """                gameMode = 'match';
-                combatEnabled = false;
-                weaponSelectionConfirmed = false;""",
-    1
-)
-html = html.replace(
-    """                startMatchCountdown();
-
-                myHpBar.style.width""",
-    """                // 양쪽 플레이어가 무기 선택을 끝내면 서버가 roundCountdown을 보냅니다.
-
-                myHpBar.style.width"""
-)
-
-# 7) Add round countdown/start events before opponentShoot
-html = html.replace(
-    """            socket.on('opponentShoot', (data) => {""",
-    """            socket.on('roundCountdown', (data) => {
-                combatEnabled = false;
-                startMatchCountdown(data?.seconds ?? 3);
+        function setupNetworkingEvents() {
+            socket.on('currentPlayers', (players) => {
+                Object.keys(players).forEach((id) => {
+                    if (id !== socket.id) spawnOtherPlayerMesh(id, players[id].pos);
+                });
             });
 
-            socket.on('roundStart', () => {
-                combatEnabled = true;
-            });
+            socket.on('newPlayer', (playerInfo) => { spawnOtherPlayerMesh(playerInfo.id, playerInfo.pos); });
 
-            socket.on('serverCorrection', (data) => {
-                // 서버 권한 위치 보정
-                if (data?.pos) {
-                    yawObject.position.set(data.pos.x, data.pos.y, data.pos.z);
+            socket.on('playerMoved', (playerInfo) => {
+                if (otherPlayers[playerInfo.id]) {
+                    const targetGroup = otherPlayers[playerInfo.id];
+                    const isMoving = targetGroup.position.distanceTo(playerInfo.pos) > 0.01;
+                    targetGroup.position.copy(playerInfo.pos);
+                    targetGroup.rotation.y = playerInfo.rotY;
+                    targetGroup.visible = true; 
+
+                    const leftLeg = targetGroup.getObjectByName("leftLeg");
+                    const rightLeg = targetGroup.getObjectByName("rightLeg");
+
+                    if (leftLeg && rightLeg) {
+                        if (isMoving) {
+                            const time = Date.now() * 0.008;
+                            leftLeg.rotation.x = Math.sin(time) * 0.6;
+                            rightLeg.rotation.x = -Math.sin(time) * 0.6;
+                        } else {
+                            leftLeg.rotation.x = 0;
+                            rightLeg.rotation.x = 0;
+                        }
+                    }
+                } else {
+                    spawnOtherPlayerMesh(playerInfo.id, playerInfo.pos);
                 }
             });
 
-            socket.on('opponentShoot', (data) => {"""
-)
+            socket.on('readyStatusUpdate', (count) => {
+                if (count > 0) {
+                    padStatusTextEl.innerText = `매칭 중 (${count} / 2)`;
+                    padStatusTextEl.className = "text-lg font-black text-amber-400 animate-pulse";
+                } else {
+                    padStatusTextEl.innerText = `대기 중 (0 / 2)`;
+                    padStatusTextEl.className = "text-lg font-black text-green-400";
+                }
+            });
 
-# 8) Reset combat on game result
-html = html.replace(
-    """                gameMode = 'lobby';
-                versusContainer.classList.add('opacity-0');""",
-    """                gameMode = 'lobby';
-                combatEnabled = false;
-                weaponSelectionConfirmed = false;
-                versusContainer.classList.add('opacity-0');"""
-)
+            socket.on('serverFullError', () => {
+                isPlayerReady = false;
+                showResultAlert("🚨 서버 정원 초과!", "text-orange-500 bg-black/90 border-orange-500");
+                yawObject.position.set(0, PLAYER_HEIGHT, 12); 
+            });
 
-# 9) Fixed pistol fire interval
-html = html.replace(
-    """            let delay = wData.delay;
-            if (currentW === 'pistol') {
-                delay = 500 + Math.random() * 500;
-            }""",
-    """            const delay = wData.delay;"""
-)
+            socket.on('matchFound', (data) => {
+                currentRoomId = data.roomId; 
+                myRole = data.role;
+                opponentId = data.opponentId;
+                gameMode = 'match';
 
-# 10) Prevent shooting before combat enabled
-html = html.replace(
-    """        function handleWeaponShooting() {
-            if (!isLocked) return;""",
-    """        function handleWeaponShooting() {
-            if (!isLocked) return;
-            if (gameMode === 'match' && !combatEnabled) {
-                player.isShooting = false;
-                return;
-            }"""
-)
-
-# 11) Knife must include obstacles too
-html = html.replace(
-    """            if (currentW !== 'knife') obstacles.forEach(obs => targetMeshes.push(obs));""",
-    """            // 칼도 벽을 무시하지 않도록 모든 공격에서 장애물 Raycast
-            obstacles.forEach(obs => targetMeshes.push(obs));"""
-)
-
-# 12) Replace direct hitPlayer with shotRequest. Keep client prediction visuals but server calculates damage/hit.
-html = html.replace(
-    """                        socket.emit('hitPlayer', { roomId: currentRoomId, targetId: hit.object.userData.targetId, damage: finalDamage });""",
-    """                        // 데미지는 서버가 재검증/결정한다. 클라이언트는 맞았다고 주장하지 않는다.
-                        socket.emit('shotRequest', {
-                            roomId: currentRoomId,
-                            weapon: currentW,
-                            origin: { x: raycaster.ray.origin.x, y: raycaster.ray.origin.y, z: raycaster.ray.origin.z },
-                            direction: { x: raycaster.ray.direction.x, y: raycaster.ray.direction.y, z: raycaster.ray.direction.z }
-                        });"""
-)
-
-# But if miss, server still needs a shot request. Add flag to avoid duplicates and send once for every shot.
-# More robust replacement: insert request immediately after raycaster setup and remove inside-hit request block.
-# We'll remove the just inserted hit-only block and instead put a single shotRequest after raycaster.setFromCamera.
-html = html.replace(
-    """            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            const startVec""",
-    """            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            if (gameMode === 'match') {
-                socket.emit('shotRequest', {
-                    roomId: currentRoomId,
-                    weapon: currentW,
-                    origin: { x: raycaster.ray.origin.x, y: raycaster.ray.origin.y, z: raycaster.ray.origin.z },
-                    direction: { x: raycaster.ray.direction.x, y: raycaster.ray.direction.y, z: raycaster.ray.direction.z }
+                Object.keys(otherPlayers).forEach(id => {
+                    if (id !== opponentId) otherPlayers[id].visible = false;
                 });
+
+                gameStatusEl.innerText = `배틀 아레나 (BATTLE ARENA)`;
+                gameStatusEl.className = "text-xl font-black text-rose-500 animate-pulse";
+                versusContainer.classList.remove('opacity-0');
+
+                if (myRole === 'p1') {
+                    yawObject.position.set(0, PLAYER_HEIGHT, -22);
+                    yawObject.rotation.y = 0;
+                } else {
+                    yawObject.position.set(0, PLAYER_HEIGHT, -48);
+                    yawObject.rotation.y = Math.PI; 
+                }
+                
+                player.hp = 100;
+                Object.keys(weaponsData).forEach(w => {
+                    if (weaponsData[w].maxAmmo) {
+                        weaponsData[w].ammo = weaponsData[w].maxAmmo;
+                        weaponsData[w].mags = weaponsData[w].maxMags;
+                        weaponsData[w].isReloading = false;
+                    }
+                });
+
+                // 무기 선택 모달 초기화 및 표시
+                tempSelectedWeapons = [];
+                document.querySelectorAll('.weapon-select-card').forEach(c => c.classList.remove('selected'));
+                confirmWeaponsBtn.disabled = true;
+                confirmWeaponsBtn.className = "w-full bg-gray-700 text-gray-400 font-extrabold py-3 rounded-2xl text-sm transition-all shadow-lg";
+                confirmWeaponsBtn.innerText = "무기 2개 선택 완료 (0/2)";
+                
+                document.exitPointerLock();
+                weaponSelectModal.classList.remove('hidden');
+                
+                startMatchCountdown();
+
+                myHpBar.style.width = '100%';
+                myHpText.innerText = '100 HP';
+                enemyHpBar.style.width = '100%';
+                enemyHpText.innerText = '100 HP';
+            });
+
+            socket.on('opponentShoot', (data) => { 
+                if(data.isKnifeAttack) return;
+                renderTracerTrail(data.start, data.end, 0xef4444); 
+            });
+
+            socket.on('damaged', (data) => {
+                player.hp = data.currentHp;
+                const percentage = Math.max(0, Math.ceil(player.hp));
+                myHpBar.style.width = percentage + '%'; 
+                myHpText.innerText = `${percentage} HP`; 
+                
+                damageFlashEl.className = 'hit';
+                setTimeout(() => damageFlashEl.className = '', 100);
+
+                if (player.hp <= 0) {
+                    socket.emit('matchOver', { roomId: currentRoomId, winnerId: opponentId, loserId: socket.id });
+                }
+            });
+
+            socket.on('updateEnemyHP', (data) => {
+                const percentage = Math.max(0, Math.ceil(data.enemyHp));
+                enemyHpBar.style.width = percentage + '%';
+                enemyHpText.innerText = `${percentage} HP`;
+            });
+
+            socket.on('gameResult', (result) => {
+                gameMode = 'lobby';
+                versusContainer.classList.add('opacity-0');
+                matchTimerDisplay.classList.add('hidden');
+                weaponSelectModal.classList.add('hidden');
+
+                gameStatusEl.innerText = "대기실 (LOBBY)";
+                gameStatusEl.className = "text-xl font-black text-amber-400";
+                
+                Object.keys(otherPlayers).forEach(id => { scene.remove(otherPlayers[id]); });
+                otherPlayers = {};
+
+                if(result === 'win') {
+                    scoreWinEl.innerText = parseInt(scoreWinEl.innerText) + 1;
+                    showResultAlert("👑 대결 승리!", "text-green-400");
+                } else {
+                    scoreLoseEl.innerText = parseInt(scoreLoseEl.innerText) + 1;
+                    showResultAlert("💀 대결 패배...", "text-red-400");
+                }
+
+                yawObject.position.set((Math.random() - 0.5) * 5, PLAYER_HEIGHT, 12);
+                yawObject.rotation.set(0, 0, 0);
+                
+                currentRoomId = null;
+                opponentId = null;
+                myRole = null;
+                isPlayerReady = false;
+
+                Object.keys(weaponsData).forEach(w => {
+                    if (weaponsData[w].maxAmmo) {
+                        weaponsData[w].ammo = weaponsData[w].maxAmmo;
+                        weaponsData[w].mags = weaponsData[w].maxMags;
+                    }
+                });
+                selectedWeapons = ['rifle', 'pistol'];
+                swapToSlot(0);
+                updateAmmoUI();
+            });
+
+            socket.on('playerDisconnected', (id) => {
+                if (otherPlayers[id]) {
+                    scene.remove(otherPlayers[id]);
+                    delete otherPlayers[id];
+                }
+            });
+        }
+
+        function buildLobbyAndArena() {
+            const lobbyFloorMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.9 }); 
+            const arenaFloorMat = new THREE.MeshStandardMaterial({ color: 0x2e1065, roughness: 0.7, metalness: 0.2 }); 
+
+            const obsMaterials = [
+                new THREE.MeshStandardMaterial({ color: 0x06b6d4, emissive: 0x06b6d4, emissiveIntensity: 0.15 }), 
+                new THREE.MeshStandardMaterial({ color: 0xec4899 }), 
+                new THREE.MeshStandardMaterial({ color: 0x84cc16 }), 
+                new THREE.MeshStandardMaterial({ color: 0xfacc15 })  
+            ];
+
+            const lobbyFloor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), lobbyFloorMat);
+            lobbyFloor.rotation.x = -Math.PI / 2;
+            lobbyFloor.receiveShadow = true;
+            scene.add(lobbyFloor);
+
+            const arenaFloor = new THREE.Mesh(new THREE.BoxGeometry(45, 1, 45), arenaFloorMat);
+            arenaFloor.position.set(0, -0.5, -35);
+            arenaFloor.receiveShadow = true;
+            scene.add(arenaFloor);
+
+            const obsConfigs = [
+                { size: [3, 4, 3], pos: [-8, 2, -20], matIdx: 1 }, 
+                { size: [3, 2, 8], pos: [8, 1, -25], matIdx: 2 },  
+                { size: [3, 4, 3], pos: [8, 2, -50], matIdx: 1 }, 
+                { size: [3, 2, 8], pos: [-8, 1, -45], matIdx: 3 }, 
+                { size: [1.5, 6, 1.5], pos: [-12, 3, -35], matIdx: 0 }, 
+                { size: [1.5, 6, 1.5], pos: [12, 3, -35], matIdx: 0 },  
+                { size: [6, 1, 6], pos: [0, 0.5, -35], matIdx: 0 },     
+                { size: [2, 3, 2], pos: [0, 2.5, -35], matIdx: 1 }      
+            ];
+
+            obsConfigs.forEach(config => {
+                const geometry = new THREE.BoxGeometry(config.size[0], config.size[1], config.size[2]);
+                const material = obsMaterials[config.matIdx].clone(); 
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(config.pos[0], config.pos[1], config.pos[2]);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                
+                mesh.userData = { width: config.size[0], height: config.size[1], depth: config.size[2] };
+                scene.add(mesh);
+                obstacles.push(mesh); 
+            });
+
+            padMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(padRadius, padRadius, 0.1, 32),
+                new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 0.5 })
+            );
+            padMesh.position.set(padPos.x, 0.05, padPos.z);
+            scene.add(padMesh);
+        }
+
+        function spawnOtherPlayerMesh(id, pos) {
+            if (otherPlayers[id]) return;
+
+            const group = new THREE.Group();
+            
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.0, 0.6), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
+            body.position.y = 1.3;
+            body.castShadow = true;
+            body.userData = { targetId: id, part: 'body' };
+            group.add(body);
+            
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
+            head.position.y = 2.1;
+            head.castShadow = true;
+            head.userData = { targetId: id, part: 'head' };
+            group.add(head);
+
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+            const legGeo = new THREE.BoxGeometry(0.35, 0.8, 0.4);
+
+            const leftLegPivot = new THREE.Group();
+            leftLegPivot.position.set(-0.25, 0.8, 0);
+            const leftLeg = new THREE.Mesh(legGeo, legMat);
+            leftLeg.position.y = -0.4;
+            leftLeg.castShadow = true;
+            leftLeg.userData = { targetId: id, part: 'body' };
+            leftLegPivot.add(leftLeg);
+            leftLegPivot.name = "leftLeg";
+            group.add(leftLegPivot);
+
+            const rightLegPivot = new THREE.Group();
+            rightLegPivot.position.set(0.25, 0.8, 0);
+            const rightLeg = new THREE.Mesh(legGeo, legMat);
+            rightLeg.position.y = -0.4;
+            rightLeg.castShadow = true;
+            rightLeg.userData = { targetId: id, part: 'body' };
+            rightLegPivot.add(rightLeg);
+            rightLegPivot.name = "rightLeg";
+            group.add(rightLegPivot);
+
+            group.position.copy(pos);
+            if (gameMode === 'match' && id !== opponentId) group.visible = false;
+
+            scene.add(group);
+            otherPlayers[id] = group;
+        }
+
+        function createFpsWeapons() {
+            gunContainer = new THREE.Group();
+            gunContainer.position.set(0.25, -0.2, -0.4);
+            camera.add(gunContainer);
+
+            rifleMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1, 0.15, 1.0), 
+                new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 })
+            );
+            gunContainer.add(rifleMesh);
+
+            pistolMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.12, 0.4), 
+                new THREE.MeshStandardMaterial({ color: 0x3b82f6, metalness: 0.7, roughness: 0.4 })
+            );
+            pistolMesh.visible = false;
+            gunContainer.add(pistolMesh);
+
+            sniperMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1, 0.18, 1.4), 
+                new THREE.MeshStandardMaterial({ color: 0xa855f7, metalness: 0.9, roughness: 0.2 })
+            );
+            sniperMesh.visible = false;
+            gunContainer.add(sniperMesh);
+
+            knifeMesh = new THREE.Group();
+            const blade = new THREE.Mesh( 
+                new THREE.BoxGeometry(0.02, 0.08, 0.45),
+                new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.9, roughness: 0.1, emissive: 0xef4444, emissiveIntensity: 0.2 })
+            );
+            blade.position.set(0, 0, -0.2);
+            knifeMesh.add(blade);
+
+            const hilt = new THREE.Mesh( 
+                new THREE.BoxGeometry(0.04, 0.1, 0.15),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 })
+            );
+            hilt.position.set(0, 0, 0.05);
+            knifeMesh.add(hilt);
+            knifeMesh.visible = false; 
+            gunContainer.add(knifeMesh);
+        }
+
+        function onWindowWheel(e) {
+            if (!isLocked) return;
+            if (e.deltaY > 0) swapToSlot(1);
+            else if (e.deltaY < 0) swapToSlot(0);
+        }
+
+        function swapToSlot(slotIdx) {
+            const currentW = getCurrentWeaponType();
+            if (weaponsData[currentW] && weaponsData[currentW].isReloading) return;
+            
+            activeSlotIndex = slotIdx;
+            const newW = getCurrentWeaponType();
+
+            player.isShooting = false; 
+            setZoomState(false);
+
+            rifleMesh.visible = (newW === 'rifle');
+            pistolMesh.visible = (newW === 'pistol');
+            sniperMesh.visible = (newW === 'sniper');
+            knifeMesh.visible = (newW === 'knife');
+
+            const slot1El = document.getElementById('slot-1');
+            const slot2El = document.getElementById('slot-2');
+
+            if (slotIdx === 0) {
+                slot1El.classList.add('weapon-slot-active');
+                slot2El.classList.remove('weapon-slot-active');
+            } else {
+                slot2El.classList.add('weapon-slot-active');
+                slot1El.classList.remove('weapon-slot-active');
+            }
+        }
+
+        function triggerSliding() {
+            if (isSliding || !player.isGrounded) return;
+
+            const moveDir = new THREE.Vector3();
+            if (keys['KeyW']) moveDir.z -= 1;
+            if (keys['KeyS']) moveDir.z += 1;
+            if (keys['KeyA']) moveDir.x -= 1;
+            if (keys['KeyD']) moveDir.x += 1;
+
+            if (moveDir.lengthSq() === 0) moveDir.z = -1; 
+            moveDir.normalize();
+
+            slidingDir.copy(moveDir).applyQuaternion(yawObject.quaternion);
+            slidingDir.y = 0;
+            slidingDir.normalize();
+
+            isSliding = true;
+            slidingTimer = 25; 
+        }
+
+        function onKeyDown(e) {
+            keys[e.code] = true;
+
+            if (e.code === 'Digit1') swapToSlot(0);
+            if (e.code === 'Digit2') swapToSlot(1);
+
+            if (e.code === 'KeyC' && isLocked) triggerSliding();
+
+            if (e.code === 'Space' && player.isGrounded && isLocked) {
+                player.velocity.y = JUMP_FORCE;
+                player.isGrounded = false;
+                if (isSliding) isSliding = false; 
             }
 
-            const startVec"""
-)
-html = re.sub(
-    r"""\s*// 데미지는 서버가 재검증/결정한다\. 클라이언트는 맞았다고 주장하지 않는다\.\s*socket\.emit\('shotRequest', \{.*?\}\);""",
-    "",
-    html,
-    flags=re.S
-)
+            if (e.code === 'KeyR' && getCurrentWeaponType() !== 'knife' && isLocked) {
+                reloadPlayerWeapon();
+            }
+        }
 
-# 13) Movement lock before combat starts, while still allowing lobby movement
-html = html.replace(
-    """            if (!isLocked) return;
+        function onKeyUp(e) { keys[e.code] = false; }
+        
+        function onMouseMove(e) {
+            if (!isLocked) return;
+            const sensitivity = isZoomed ? 0.0008 : 0.002;
+            yawObject.rotation.y -= e.movementX * sensitivity; 
+            pitchObject.rotation.x -= e.movementY * sensitivity;
+            pitchObject.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchObject.rotation.x));
+        }
 
-            if (isSliding) {""",
-    """            if (!isLocked) return;
-            if (gameMode === 'match' && !combatEnabled) return;
+        function reloadPlayerWeapon() {
+            const currentW = getCurrentWeaponType();
+            const wData = weaponsData[currentW];
+            if (!wData || wData.mags <= 0 || wData.ammo === wData.maxAmmo || wData.isReloading) return;
 
-            if (isSliding) {"""
-)
+            setZoomState(false);
+            wData.isReloading = true;
+            const el = document.getElementById(`slot-${activeSlotIndex+1}-ammo`);
+            el.innerHTML = `<span class="text-amber-500 animate-pulse text-xs">장전 중...</span>`;
+            
+            setTimeout(() => {
+                wData.ammo = wData.maxAmmo;
+                wData.mags--;
+                updateAmmoUI();
+                wData.isReloading = false;
+            }, 1200);
+        }
 
-# 14) Block jump/slide before round start
-html = html.replace(
-    """            if (e.code === 'KeyC' && isLocked) triggerSliding();""",
-    """            if (e.code === 'KeyC' && isLocked && (gameMode !== 'match' || combatEnabled)) triggerSliding();"""
-)
-html = html.replace(
-    """            if (e.code === 'Space' && player.isGrounded && isLocked) {""",
-    """            if (e.code === 'Space' && player.isGrounded && isLocked && (gameMode !== 'match' || combatEnabled)) {"""
-)
+        function handleWeaponShooting() {
+            if (!isLocked) return;
+            const currentW = getCurrentWeaponType();
+            const wData = weaponsData[currentW];
 
-# 15) Improve collision with simple vertical-overlap logic and allow jumping over low boxes.
-collision_pattern = re.search(r"""            if \(gameMode === 'match'\) \{\n                obstacles\.forEach\(obs => \{.*?                \}\);\n            \}\n\n            if \(gameMode === 'lobby'\)""", html, re.S)
-if collision_pattern:
-    replacement = """            if (gameMode === 'match') {
+            if (currentW !== 'knife' && wData.isReloading) return;
+
+            if (currentW !== 'knife' && wData.ammo <= 0) {
+                if (wData.mags > 0) reloadPlayerWeapon();
+                return;
+            }
+
+            const now = performance.now();
+            let delay = wData.delay;
+            if (currentW === 'pistol') {
+                delay = 500 + Math.random() * 500;
+            }
+
+            if (now - player.lastShotTime < delay) return;
+            player.lastShotTime = now;
+
+            const recoilZ = isZoomed ? -0.28 : -0.3;
+            gunContainer.position.z = recoilZ;
+            setTimeout(() => gunContainer.position.z = isZoomed ? -0.25 : -0.4, 60);
+
+            if (currentW !== 'knife') {
+                wData.ammo--;
+                updateAmmoUI();
+                if (currentW === 'pistol' || currentW === 'sniper') player.isShooting = false; 
+            }
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+            const startVec = new THREE.Vector3(0.25, -0.15, -0.9).unproject(camera);
+            let endVec = new THREE.Vector3();
+            
+            const currentRange = currentW === 'knife' ? wData.range : 100;
+            raycaster.ray.at(currentRange, endVec);
+
+            const targetMeshes = [];
+            Object.values(otherPlayers).forEach(p => {
+                if (p.visible) {
+                    p.traverse(c => { if(c.isMesh) targetMeshes.push(c); });
+                }
+            });
+            
+            if (currentW !== 'knife') obstacles.forEach(obs => targetMeshes.push(obs));
+
+            const intersects = raycaster.intersectObjects(targetMeshes);
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                
+                if (hit.distance <= currentRange) {
+                    endVec.copy(hit.point);
+
+                    if (gameMode === 'match' && hit.object.userData.targetId === opponentId) {
+                        let finalDamage = wData.damage;
+                        if (currentW === 'sniper') {
+                            finalDamage = (hit.object.userData.part === 'head') ? wData.damageHead : wData.damageBody;
+                        }
+                        socket.emit('hitPlayer', { roomId: currentRoomId, targetId: hit.object.userData.targetId, damage: finalDamage });
+                    }
+                }
+            }
+
+            if (currentW !== 'knife') renderTracerTrail(startVec, endVec, 0xfacc15); 
+            
+            socket.emit('shoot', { 
+                roomId: currentRoomId, 
+                start: startVec, 
+                end: endVec, 
+                isKnifeAttack: (currentW === 'knife') 
+            });
+        }
+
+        function renderTracerTrail(start, end, color) {
+            const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 });
+            const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
+            const line = new THREE.Line(geo, mat);
+            scene.add(line);
+            setTimeout(() => { scene.remove(line); geo.dispose(); mat.dispose(); }, 40); 
+        }
+
+        function updateMainLoopAndPhysics() {
+            const targetFov = isZoomed ? 45 : 75;
+            const targetGunX = isZoomed ? 0.0 : 0.25;
+            const targetGunY = isZoomed ? (isSliding ? -0.25 : -0.12) : (isSliding ? -0.3 : -0.2);
+            const targetGunZ = isZoomed ? -0.25 : -0.4;
+
+            camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.15);
+            camera.updateProjectionMatrix();
+
+            gunContainer.position.x = THREE.MathUtils.lerp(gunContainer.position.x, targetGunX, 0.2);
+            gunContainer.position.y = THREE.MathUtils.lerp(gunContainer.position.y, targetGunY, 0.2);
+            gunContainer.position.z = THREE.MathUtils.lerp(gunContainer.position.z, targetGunZ, 0.2);
+
+            const targetCamY = isSliding ? PLAYER_HEIGHT * 0.5 : PLAYER_HEIGHT;
+            
+            if (!player.isGrounded) {
+                player.velocity.y -= GRAVITY; 
+                yawObject.position.y += player.velocity.y;
+
+                const floorY = 0;
+                if (yawObject.position.y <= targetCamY + floorY) {
+                    yawObject.position.y = targetCamY + floorY;
+                    player.velocity.y = 0;
+                    player.isGrounded = true;
+                }
+            } else {
+                yawObject.position.y = THREE.MathUtils.lerp(yawObject.position.y, targetCamY, 0.2);
+            }
+
+            if (!isLocked) return;
+
+            if (isSliding) {
+                yawObject.position.addScaledVector(slidingDir, PLAYER_SPEED * 1.8);
+                slidingTimer--;
+                if (slidingTimer <= 0) isSliding = false;
+            } else {
+                const moveDir = new THREE.Vector3();
+                if (keys['KeyW']) moveDir.z -= 1;
+                if (keys['KeyS']) moveDir.z += 1;
+                if (keys['KeyA']) moveDir.x -= 1;
+                if (keys['KeyD']) moveDir.x += 1;
+                moveDir.normalize();
+
+                const rotatedDir = moveDir.clone().applyQuaternion(yawObject.quaternion);
+                rotatedDir.y = 0; 
+                rotatedDir.normalize();
+
+                const speed = isZoomed ? (PLAYER_SPEED * 0.5) : PLAYER_SPEED;
+                yawObject.position.addScaledVector(rotatedDir, speed);
+            }
+
+            if (gameMode === 'match') {
                 obstacles.forEach(obs => {
                     const obsPos = obs.position;
                     const obsSize = obs.userData;
                     const playerPos = yawObject.position;
-                    const playerRadius = 0.5;
-                    const feetY = playerPos.y - (isSliding ? PLAYER_HEIGHT * 0.5 : PLAYER_HEIGHT);
-                    const headY = playerPos.y + 0.15;
-                    const obsBottom = obsPos.y - obsSize.height / 2;
-                    const obsTop = obsPos.y + obsSize.height / 2;
-
-                    // 수직으로 겹칠 때만 X/Z 충돌. 충분히 점프했다면 낮은 구조물을 넘을 수 있음.
-                    const verticalOverlap = headY > obsBottom && feetY < obsTop;
-                    if (!verticalOverlap) return;
+                    const playerRadius = 0.5; 
 
                     const dx = Math.abs(playerPos.x - obsPos.x);
-                    const dz = Math.abs(playerPos.z - obsPos.z);
+                    if (dx < (obsSize.width / 2 + playerRadius)) {
+                        const dz = Math.abs(playerPos.z - obsPos.z);
+                        if (dz < (obsSize.depth / 2 + playerRadius)) {
+                            const pushX = (obsSize.width / 2 + playerRadius) - dx;
+                            const pushZ = (obsSize.depth / 2 + playerRadius) - dz;
 
-                    if (dx < (obsSize.width / 2 + playerRadius) &&
-                        dz < (obsSize.depth / 2 + playerRadius)) {
-                        const pushX = (obsSize.width / 2 + playerRadius) - dx;
-                        const pushZ = (obsSize.depth / 2 + playerRadius) - dz;
-
-                        if (pushX < pushZ) {
-                            yawObject.position.x += (playerPos.x > obsPos.x ? pushX : -pushX);
-                        } else {
-                            yawObject.position.z += (playerPos.z > obsPos.z ? pushZ : -pushZ);
+                            if (pushX < pushZ) {
+                                yawObject.position.x += (playerPos.x > obsPos.x ? pushX : -pushX);
+                            } else {
+                                yawObject.position.z += (playerPos.z > obsPos.z ? pushZ : -pushZ);
+                            }
                         }
                     }
                 });
             }
 
-            if (gameMode === 'lobby')"""
-    html = html[:collision_pattern.start()] + replacement + html[collision_pattern.end():]
+            if (gameMode === 'lobby') {
+                yawObject.position.x = Math.max(-14, Math.min(14, yawObject.position.x));
+                yawObject.position.z = Math.max(-14, Math.min(14, yawObject.position.z));
 
-# 16) Rate-limit movement packets to ~20Hz and only if changed
-move_emit = re.search(r"""            socket\.emit\('playerMovement', \{ \n                roomId: currentRoomId, \n                pos: yawObject\.position, \n                rotY: yawObject\.rotation\.y,\n                weapon: getCurrentWeaponType\(\)\n            \}\);""", html)
-if move_emit:
-    replacement = """            const nowMs = performance.now();
-            if (nowMs - movementSendTimer >= MOVEMENT_SEND_INTERVAL) {
-                const pos = yawObject.position;
-                const rotY = yawObject.rotation.y;
-                const weapon = getCurrentWeaponType();
-                const changed =
-                    lastSentMove.x === null ||
-                    Math.abs(pos.x - lastSentMove.x) > 0.005 ||
-                    Math.abs(pos.y - lastSentMove.y) > 0.005 ||
-                    Math.abs(pos.z - lastSentMove.z) > 0.005 ||
-                    Math.abs(rotY - lastSentMove.rotY) > 0.002 ||
-                    weapon !== lastSentMove.weapon;
+                const distToPad = new THREE.Vector2(yawObject.position.x, yawObject.position.z).distanceTo(new THREE.Vector2(padPos.x, padPos.z));
+                const standingOnPad = (distToPad < padRadius);
 
-                if (changed) {
-                    socket.emit('playerMovement', {
-                        roomId: currentRoomId,
-                        pos: { x: pos.x, y: pos.y, z: pos.z },
-                        rotY,
-                        weapon
-                    });
-                    lastSentMove = { x: pos.x, y: pos.y, z: pos.z, rotY, weapon };
+                if (standingOnPad !== isPlayerReady) {
+                    isPlayerReady = standingOnPad;
+                    socket.emit('toggleReady', { isReady: isPlayerReady });
                 }
-                movementSendTimer = nowMs;
-            }"""
-    html = html[:move_emit.start()] + replacement + html[move_emit.end():]
+            } else {
+                yawObject.position.x = Math.max(-21, Math.min(21, yawObject.position.x));
+                yawObject.position.z = Math.max(-56, Math.min(-14, yawObject.position.z));
+            }
 
-# 17) Server can send authoritative shot visuals.
-html = html.replace(
-    """            socket.on('opponentShoot', (data) => { 
-                if(data.isKnifeAttack) return;
-                renderTracerTrail(data.start, data.end, 0xef4444); 
-            });""",
-    """            socket.on('opponentShoot', (data) => {
-                if (data.isKnifeAttack) return;
-                renderTracerTrail(
-                    new THREE.Vector3(data.start.x, data.start.y, data.start.z),
-                    new THREE.Vector3(data.end.x, data.end.y, data.end.z),
-                    0xef4444
-                );
-            });"""
-)
+            socket.emit('playerMovement', { 
+                roomId: currentRoomId, 
+                pos: yawObject.position, 
+                rotY: yawObject.rotation.y,
+                weapon: getCurrentWeaponType()
+            });
+        }
 
-# 18) Don't emit old shoot packet (server gets shotRequest and rebroadcasts authoritative tracer)
-html = re.sub(
-    r"""\n            socket\.emit\('shoot', \{ \n                roomId: currentRoomId, \n                start: startVec, \n                end: endVec, \n                isKnifeAttack: \(currentW === 'knife'\) \n            \}\);""",
-    "",
-    html
-)
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        
+        function showResultAlert(msg, cssClass) {
+            const div = document.createElement('div');
+            div.className = `absolute top-1/3 left-1/2 -translate-x-1/2 bg-black/80 px-10 py-5 border border-white/20 text-3xl font-black rounded-2xl pointer-events-none z-50 animate-bounce ${cssClass}`;
+            div.innerText = msg;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 2500);
+        }
 
-# Add a small notice to UI instructions
-html = html.replace(
-    '<span class="text-amber-400 font-bold">WASD</span>: 이동 |',
-    '<span class="text-amber-400 font-bold">WASD</span>: 이동 |'
-)
+        function animate() {
+            requestAnimationFrame(animate);
+            updateMainLoopAndPhysics();
+            if (player.isShooting) handleWeaponShooting();
+            renderer.render(scene, camera);
+        }
 
-outdir = Path("/mnt/data/fps_arena_fixed")
-outdir.mkdir(exist_ok=True)
-(outdir / "index.html").write_text(html, encoding="utf-8")
-
-server_js = r"""
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: true, credentials: false }
-});
-
-app.use(express.static(__dirname));
-
-const PORT = process.env.PORT || 3000;
-
-const players = new Map();
-const readyQueue = [];
-const rooms = new Map();
-
-const PLAYER_HEIGHT = 1.6;
-const MAX_MOVE_PER_SEC = 12.0;
-const MOVE_TOLERANCE = 1.25;
-
-const ARENA_BOUNDS = { minX: -21, maxX: 21, minZ: -56, maxZ: -14 };
-const LOBBY_BOUNDS = { minX: -14, maxX: 14, minZ: -14, maxZ: 14 };
-
-const obstacles = [
-  { x:-8, y:2,   z:-20, w:3,   h:4, d:3 },
-  { x: 8, y:1,   z:-25, w:3,   h:2, d:8 },
-  { x: 8, y:2,   z:-50, w:3,   h:4, d:3 },
-  { x:-8, y:1,   z:-45, w:3,   h:2, d:8 },
-  { x:-12,y:3,   z:-35, w:1.5, h:6, d:1.5 },
-  { x: 12,y:3,   z:-35, w:1.5, h:6, d:1.5 },
-  { x: 0, y:0.5, z:-35, w:6,   h:1, d:6 },
-  { x: 0, y:2.5, z:-35, w:2,   h:3, d:2 }
-];
-
-const weaponStats = {
-  rifle:  { delay:100,  damage:6.7, range:100 },
-  pistol: { delay:600,  damage:10,  range:100 },
-  sniper: { delay:1000, body:34, head:100, range:100 },
-  knife:  { delay:250,  damage:35, range:2.5 }
-};
-
-function vec(v) {
-  return { x:Number(v?.x)||0, y:Number(v?.y)||0, z:Number(v?.z)||0 };
-}
-function sub(a,b){ return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z}; }
-function add(a,b){ return {x:a.x+b.x,y:a.y+b.y,z:a.z+b.z}; }
-function mul(a,s){ return {x:a.x*s,y:a.y*s,z:a.z*s}; }
-function dot(a,b){ return a.x*b.x+a.y*b.y+a.z*b.z; }
-function len(a){ return Math.sqrt(dot(a,a)); }
-function norm(a){ const l=len(a)||1; return mul(a,1/l); }
-function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
-function distance(a,b){ return len(sub(a,b)); }
-
-function rayAABB(origin, dir, box, maxDist) {
-  const min = {x:box.x-box.w/2, y:box.y-box.h/2, z:box.z-box.d/2};
-  const max = {x:box.x+box.w/2, y:box.y+box.h/2, z:box.z+box.d/2};
-  let tmin = 0, tmax = maxDist;
-  for (const axis of ["x","y","z"]) {
-    if (Math.abs(dir[axis]) < 1e-8) {
-      if (origin[axis] < min[axis] || origin[axis] > max[axis]) return null;
-    } else {
-      const inv = 1/dir[axis];
-      let t1 = (min[axis]-origin[axis])*inv;
-      let t2 = (max[axis]-origin[axis])*inv;
-      if (t1>t2) [t1,t2]=[t2,t1];
-      tmin=Math.max(tmin,t1);
-      tmax=Math.min(tmax,t2);
-      if (tmin>tmax) return null;
-    }
-  }
-  return tmin;
-}
-
-function raySphere(origin, dir, center, radius, maxDist) {
-  const oc = sub(origin, center);
-  const b = dot(oc, dir);
-  const c = dot(oc, oc) - radius*radius;
-  const disc = b*b-c;
-  if (disc < 0) return null;
-  const s = Math.sqrt(disc);
-  const t1 = -b-s, t2=-b+s;
-  const t = t1>=0 ? t1 : (t2>=0 ? t2 : null);
-  return (t !== null && t <= maxDist) ? t : null;
-}
-
-function publicPlayers() {
-  const obj = {};
-  for (const [id,p] of players) obj[id] = { id, pos:p.pos, rotY:p.rotY };
-  return obj;
-}
-
-function removeReady(id) {
-  let i;
-  while ((i = readyQueue.indexOf(id)) !== -1) readyQueue.splice(i,1);
-}
-
-function emitReadyCount() {
-  io.emit("readyStatusUpdate", readyQueue.length);
-}
-
-function tryMatch() {
-  while (readyQueue.length >= 2) {
-    const p1id = readyQueue.shift();
-    const p2id = readyQueue.shift();
-    const p1 = players.get(p1id), p2 = players.get(p2id);
-    if (!p1 || !p2 || p1.roomId || p2.roomId) continue;
-
-    const roomId = `room_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-    const room = {
-      id: roomId,
-      p1: p1id,
-      p2: p2id,
-      hp: { [p1id]:100, [p2id]:100 },
-      selected: { [p1id]:false, [p2id]:false },
-      weapons: { [p1id]:[], [p2id]:[] },
-      lastShot: { [p1id]:0, [p2id]:0 },
-      state: "weaponSelect",
-      finished: false
-    };
-    rooms.set(roomId, room);
-
-    p1.roomId=roomId; p2.roomId=roomId;
-    p1.pos={x:0,y:PLAYER_HEIGHT,z:-22}; p2.pos={x:0,y:PLAYER_HEIGHT,z:-48};
-    p1.lastMoveAt=Date.now(); p2.lastMoveAt=Date.now();
-
-    io.to(p1id).emit("matchFound",{roomId,role:"p1",opponentId:p2id});
-    io.to(p2id).emit("matchFound",{roomId,role:"p2",opponentId:p1id});
-  }
-  emitReadyCount();
-}
-
-function finishRoom(room, winnerId, loserId) {
-  if (!room || room.finished) return;
-  room.finished = true;
-  room.state = "ended";
-
-  io.to(winnerId).emit("gameResult","win");
-  io.to(loserId).emit("gameResult","lose");
-
-  for (const id of [winnerId, loserId]) {
-    const p=players.get(id);
-    if (p) {
-      p.roomId=null;
-      p.pos={x:(Math.random()-.5)*5,y:PLAYER_HEIGHT,z:12};
-      p.lastMoveAt=Date.now();
-    }
-  }
-  rooms.delete(room.id);
-}
-
-io.on("connection", socket => {
-  players.set(socket.id,{
-    id:socket.id,
-    pos:{x:0,y:PLAYER_HEIGHT,z:12},
-    rotY:0,
-    weapon:"rifle",
-    roomId:null,
-    lastMoveAt:Date.now()
-  });
-
-  socket.emit("currentPlayers",publicPlayers());
-  socket.broadcast.emit("newPlayer",{id:socket.id,pos:players.get(socket.id).pos});
-
-  socket.on("toggleReady", ({isReady}) => {
-    const p=players.get(socket.id);
-    if (!p || p.roomId) return;
-    removeReady(socket.id);
-    if (isReady) readyQueue.push(socket.id);
-    emitReadyCount();
-    tryMatch();
-  });
-
-  socket.on("weaponsSelected", ({roomId,weapons}) => {
-    const room=rooms.get(roomId);
-    if (!room || room.finished || ![room.p1,room.p2].includes(socket.id)) return;
-    if (!Array.isArray(weapons) || weapons.length!==2) return;
-    const uniq=[...new Set(weapons)];
-    if (uniq.length!==2 || uniq.some(w=>!weaponStats[w])) return;
-
-    room.weapons[socket.id]=uniq;
-    room.selected[socket.id]=true;
-
-    if (room.selected[room.p1] && room.selected[room.p2] && room.state==="weaponSelect") {
-      room.state="countdown";
-      io.to(roomId).emit("roundCountdown",{seconds:3});
-      setTimeout(()=>{
-        const live=rooms.get(roomId);
-        if (!live || live.finished || live.state!=="countdown") return;
-        live.state="playing";
-        io.to(roomId).emit("roundStart");
-      },3000);
-    }
-  });
-
-  socket.on("playerMovement", data => {
-    const p=players.get(socket.id);
-    if (!p) return;
-    const now=Date.now();
-    const proposed=vec(data?.pos);
-    const room=p.roomId ? rooms.get(p.roomId) : null;
-
-    if (room && room.state!=="playing") {
-      socket.emit("serverCorrection",{pos:p.pos});
-      return;
-    }
-
-    const bounds = room ? ARENA_BOUNDS : LOBBY_BOUNDS;
-    proposed.x=clamp(proposed.x,bounds.minX,bounds.maxX);
-    proposed.z=clamp(proposed.z,bounds.minZ,bounds.maxZ);
-    proposed.y=clamp(proposed.y,0.7,4.5);
-
-    const dt=Math.max(0.016,(now-p.lastMoveAt)/1000);
-    const maxDist=MAX_MOVE_PER_SEC*dt + MOVE_TOLERANCE;
-    if (distance(proposed,p.pos)>maxDist) {
-      socket.emit("serverCorrection",{pos:p.pos});
-      return;
-    }
-
-    p.pos=proposed;
-    p.rotY=Number(data?.rotY)||0;
-    if (weaponStats[data?.weapon]) p.weapon=data.weapon;
-    p.lastMoveAt=now;
-
-    socket.broadcast.emit("playerMoved",{
-      id:socket.id,pos:p.pos,rotY:p.rotY,weapon:p.weapon
-    });
-  });
-
-  socket.on("shotRequest", data => {
-    const p=players.get(socket.id);
-    if (!p || !p.roomId) return;
-    const room=rooms.get(p.roomId);
-    if (!room || room.finished || room.state!=="playing" || data?.roomId!==room.id) return;
-
-    const weapon=data?.weapon;
-    if (!weaponStats[weapon] || !room.weapons[socket.id].includes(weapon)) return;
-
-    const now=Date.now(), stats=weaponStats[weapon];
-    if (now-room.lastShot[socket.id] < stats.delay-15) return;
-    room.lastShot[socket.id]=now;
-
-    const opponentId = room.p1===socket.id ? room.p2 : room.p1;
-    const opp = players.get(opponentId);
-    if (!opp) return;
-
-    // Ignore arbitrary client origins: origin must be close to authoritative player eye position.
-    const origin = vec(data?.origin);
-    const expectedEye = {x:p.pos.x,y:p.pos.y,z:p.pos.z};
-    if (distance(origin,expectedEye)>1.2) return;
-
-    let dir=norm(vec(data?.direction));
-    if (!Number.isFinite(dir.x+dir.y+dir.z)) return;
-
-    const maxDist=stats.range;
-    let nearestObstacle=Infinity;
-    for (const o of obstacles) {
-      const t=rayAABB(origin,dir,o,maxDist);
-      if (t!==null && t<nearestObstacle) nearestObstacle=t;
-    }
-
-    // Approximate avatar hit volumes around authoritative opponent position.
-    const headCenter={x:opp.pos.x,y:opp.pos.y+0.5,z:opp.pos.z};
-    const bodyCenter={x:opp.pos.x,y:opp.pos.y-0.35,z:opp.pos.z};
-
-    const headT=raySphere(origin,dir,headCenter,0.48,maxDist);
-    const bodyT=rayAABB(origin,dir,{x:bodyCenter.x,y:bodyCenter.y,z:bodyCenter.z,w:1.0,h:1.8,d:0.75},maxDist);
-
-    let hitPart=null, hitT=Infinity;
-    if (headT!==null && headT<hitT) { hitT=headT; hitPart="head"; }
-    if (bodyT!==null && bodyT<hitT) { hitT=bodyT; hitPart="body"; }
-
-    // Knife must also respect walls and range.
-    if (hitPart && hitT < nearestObstacle && hitT <= maxDist) {
-      let damage;
-      if (weapon==="sniper") damage = hitPart==="head" ? stats.head : stats.body;
-      else damage = stats.damage;
-
-      room.hp[opponentId]=Math.max(0,room.hp[opponentId]-damage);
-      io.to(opponentId).emit("damaged",{currentHp:room.hp[opponentId]});
-      io.to(socket.id).emit("updateEnemyHP",{enemyHp:room.hp[opponentId]});
-
-      if (room.hp[opponentId]<=0) {
-        finishRoom(room,socket.id,opponentId);
-      }
-    }
-
-    const endDist = Math.min(maxDist, nearestObstacle);
-    const end=add(origin,mul(dir,Number.isFinite(endDist)?endDist:maxDist));
-    io.to(opponentId).emit("opponentShoot",{
-      start:origin,end,isKnifeAttack:weapon==="knife"
-    });
-  });
-
-  // Old client event is deliberately ignored; winner is server-authoritative.
-  socket.on("matchOver", ()=>{});
-  socket.on("hitPlayer", ()=>{});
-  socket.on("shoot", ()=>{});
-
-  socket.on("disconnect",()=>{
-    removeReady(socket.id);
-    const p=players.get(socket.id);
-    if (p?.roomId) {
-      const room=rooms.get(p.roomId);
-      if (room && !room.finished) {
-        const other=room.p1===socket.id?room.p2:room.p1;
-        if (players.has(other)) finishRoom(room,other,socket.id);
-        else rooms.delete(room.id);
-      }
-    }
-    players.delete(socket.id);
-    io.emit("playerDisconnected",socket.id);
-    emitReadyCount();
-  });
-});
-
-server.listen(PORT,()=>console.log(`ONLINE FPS ARENA running on http://localhost:${PORT}`));
-"""
-(outdir / "server.js").write_text(textwrap.dedent(server_js).strip()+"\n", encoding="utf-8")
-
-package = {
-    "name": "online-fps-arena-fixed",
-    "version": "2.0.0",
-    "private": True,
-    "scripts": {"start": "node server.js"},
-    "dependencies": {
-        "express": "^4.21.2",
-        "socket.io": "^4.8.1"
-    }
-}
-(outdir / "package.json").write_text(json.dumps(package, ensure_ascii=False, indent=2), encoding="utf-8")
-
-readme = """# ONLINE FPS ARENA - Fixed
-
-## 실행
-1. Node.js 18+ 설치
-2. 이 폴더에서 `npm install`
-3. `npm start`
-4. 브라우저에서 `http://localhost:3000`
-5. 1v1 테스트는 브라우저 창/탭을 2개 열어 각각 접속
-
-## 수정 핵심
-- 서버 권한형 데미지/승패 판정
-- 클라이언트 임의 `hitPlayer`, `matchOver` 무시
-- 이동 속도 검증 + 서버 위치 보정
-- 이동 패킷 60Hz 수준 -> 20Hz 제한 + 변화 시 전송
-- 무기 선택을 양쪽이 완료한 뒤 3초 카운트다운
-- 카운트다운 중 이동/사격 잠금
-- 권총 랜덤 발사 딜레이 제거
-- 칼도 장애물에 막힘
-- Y축을 고려한 기본 장애물 충돌 개선
-"""
-(outdir / "README.md").write_text(readme, encoding="utf-8")
-
-zip_path = Path("/mnt/data/online_fps_arena_fixed.zip")
-with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-    for p in outdir.iterdir():
-        z.write(p, arcname=p.name)
-
-print(f"Created: {zip_path}")
-print("Files:", [p.name for p in outdir.iterdir()])
-print("index.html chars:", len(html))
+        window.onload = () => { init(); animate(); };
+    </script>
+</body>
+</html>
