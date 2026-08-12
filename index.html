@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 무기 및 슬라이딩 업데이트</title>
+    <title>ONLINE FPS ARENA - 무기 선택 및 한글화 업데이트</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -24,6 +24,19 @@
         .weapon-slot-active i {
             color: #f59e0b !important;
             filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6));
+        }
+
+        .weapon-select-card.selected {
+            border-color: #38bdf8 !important;
+            background-color: rgba(56, 189, 248, 0.2) !important;
+        }
+
+        @keyframes blink-red {
+            0%, 100% { color: #ef4444; opacity: 1; transform: scale(1.2); }
+            50% { opacity: 0.3; transform: scale(1); }
+        }
+        .timer-blink-red {
+            animation: blink-red 0.5s infinite;
         }
     </style>
 </head>
@@ -56,19 +69,23 @@
         </div>
     </div>
 
+    <!-- 중앙 카운트다운 타이머 -->
+    <div id="match-timer-display" class="hidden absolute top-20 left-1/2 -translate-x-1/2 text-6xl font-black z-30 pointer-events-none drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">
+        3
+    </div>
+
     <div id="crosshair"></div>
 
     <!-- 대형 인벤토리 & 일시정지 오버레이 -->
     <div id="pause-overlay" class="hidden absolute top-0 left-0 w-full h-full bg-black/70 backdrop-blur-md flex justify-center items-center z-40 p-6">
         <div class="bg-gray-900/90 border border-amber-500/40 rounded-3xl w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col justify-between p-6 relative">
             
-            <!-- 상단 헤더 & X 닫기 버튼 -->
             <div class="flex justify-between items-center border-b border-gray-800 pb-4">
                 <div class="flex items-center gap-3">
                     <i class="fa-solid fa-boxes-stacked text-amber-400 text-2xl"></i>
                     <div>
-                        <h2 class="text-xl font-black text-white">INVENTORY & PAUSE</h2>
-                        <p class="text-xs text-gray-400">클릭하거나 X 버튼을 눌러 복귀하세요.</p>
+                        <h2 class="text-xl font-black text-white">인벤토리 (일시정지)</h2>
+                        <p class="text-xs text-gray-400">화면을 클릭하거나 오른쪽 상단 X 버튼을 누르면 게임으로 돌아갑니다.</p>
                     </div>
                 </div>
                 <button id="inventory-close-btn" class="bg-gray-800 hover:bg-rose-600 text-gray-400 hover:text-white w-10 h-10 rounded-full transition-all flex items-center justify-center">
@@ -76,81 +93,124 @@
                 </button>
             </div>
 
-            <!-- 중단 : 보유 장비 목록 -->
+            <!-- 소유 목록 -->
             <div class="flex-1 my-4 overflow-y-auto pr-2 flex flex-col gap-3">
-                <div class="text-xs text-amber-400 font-bold uppercase tracking-wider mb-1">장착된 무기 목록</div>
+                <div class="text-xs text-amber-400 font-bold uppercase tracking-wider mb-1">소유 목록</div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <!-- 돌격소총 -->
                     <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
                         <div class="flex items-center gap-4">
                             <i class="fa-solid fa-gun text-amber-400 text-2xl"></i>
                             <div>
-                                <div class="text-sm font-bold text-white">돌격소총 (M4A1)</div>
-                                <div class="text-xs text-gray-400">기본 주무기 | 빠른 연사력</div>
+                                <div class="text-sm font-bold text-white">돌격소총</div>
+                                <div class="text-xs text-gray-400">주무기 | 균형 잡힌 높은 연사력</div>
                             </div>
                         </div>
-                        <span class="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold">슬롯 1</span>
+                        <span class="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
                     </div>
 
-                    <!-- 권총 -->
                     <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
                         <div class="flex items-center gap-4">
                             <i class="fa-solid fa-hand-holding-hand text-blue-400 text-2xl"></i>
                             <div>
-                                <div class="text-sm font-bold text-white">권총 (Pistol)</div>
-                                <div class="text-xs text-gray-400">데미지 10 | 단발 사격</div>
+                                <div class="text-sm font-bold text-white">권총</div>
+                                <div class="text-xs text-gray-400">보조무기 | 단발 사격 / 데미지 10</div>
                             </div>
                         </div>
-                        <span class="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/40 px-2.5 py-1 rounded-lg font-bold">슬롯 2</span>
+                        <span class="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
                     </div>
 
-                    <!-- 저격소총 -->
                     <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
                         <div class="flex items-center gap-4">
                             <i class="fa-solid fa-crosshairs text-purple-400 text-2xl"></i>
                             <div>
-                                <div class="text-sm font-bold text-white">저격소총 (Sniper)</div>
-                                <div class="text-xs text-gray-400">몸통 34 / 머리 100 (즉사)</div>
+                                <div class="text-sm font-bold text-white">저격소총</div>
+                                <div class="text-xs text-gray-400">특수무기 | 몸통 34 / Headshot 100</div>
                             </div>
                         </div>
-                        <span class="text-xs bg-purple-500/20 text-purple-400 border border-purple-500/40 px-2.5 py-1 rounded-lg font-bold">슬롯 3</span>
+                        <span class="text-xs bg-purple-500/20 text-purple-400 border border-purple-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
                     </div>
 
-                    <!-- 단검 -->
                     <div class="bg-gray-800/60 border border-gray-700/80 p-4 rounded-2xl flex items-center justify-between">
                         <div class="flex items-center gap-4">
                             <i class="fa-solid fa-screwdriver-wrench rotate-45 text-rose-400 text-2xl"></i>
                             <div>
-                                <div class="text-sm font-bold text-white">전투 단검 (Knife)</div>
-                                <div class="text-xs text-gray-400">근접 무기 | 높은 데미지</div>
+                                <div class="text-sm font-bold text-white">칼</div>
+                                <div class="text-xs text-gray-400">근접무기 | 무제한 공격</div>
                             </div>
                         </div>
-                        <span class="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2.5 py-1 rounded-lg font-bold">슬롯 4</span>
+                        <span class="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2.5 py-1 rounded-lg font-bold">보유 중</span>
                     </div>
                 </div>
 
-                <!-- 하단 확장용 슬롯 (추후 아이템 추가 영역) -->
+                <!-- 하단 여유 보관함 공간 -->
                 <div class="mt-4 border-t border-gray-800 pt-4">
-                    <div class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">보관함 (추후 확장 공간)</div>
+                    <div class="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">추후 확장 보관함 공간</div>
                     <div class="grid grid-cols-4 gap-3">
-                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">EMPTY</div>
-                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">EMPTY</div>
-                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">EMPTY</div>
-                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">EMPTY</div>
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
+                        <div class="h-20 bg-gray-800/20 border border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-xs text-gray-600 font-bold">비어있음</div>
                     </div>
                 </div>
             </div>
 
-            <!-- 하단 복귀 클릭 영역 -->
             <button id="resume-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-black font-black py-3 rounded-2xl text-sm transition-all active:scale-95 shadow-lg">
                 게임 계속하기 (화면 클릭)
             </button>
         </div>
     </div>
 
+    <!-- 매칭 성공 시 무기 선택 모달 -->
+    <div id="weapon-select-modal" class="hidden absolute top-0 left-0 w-full h-full bg-black/80 backdrop-blur-md flex justify-center items-center z-50 p-6 pointer-events-auto">
+        <div class="bg-gray-900 border border-sky-500/50 rounded-3xl p-6 w-full max-w-2xl text-center shadow-2xl flex flex-col gap-5">
+            <div>
+                <h2 class="text-2xl font-black text-sky-400">결투장에 입장했습니다!</h2>
+                <p class="text-xs text-gray-300 mt-1">이번 대결에서 사용할 <span class="text-amber-400 font-bold">무기 2개</span>를 선택하세요.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="rifle">
+                    <i class="fa-solid fa-gun text-amber-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">돌격소총</div>
+                        <div class="text-[10px] text-gray-400">장탄수 30발</div>
+                    </div>
+                </div>
+
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="pistol">
+                    <i class="fa-solid fa-hand-holding-hand text-blue-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">권총</div>
+                        <div class="text-[10px] text-gray-400">장탄수 4발 (단발)</div>
+                    </div>
+                </div>
+
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="sniper">
+                    <i class="fa-solid fa-crosshairs text-purple-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">저격소총</div>
+                        <div class="text-[10px] text-gray-400">장탄수 1발 (Headshot 100)</div>
+                    </div>
+                </div>
+
+                <div class="weapon-select-card bg-gray-800/80 border-2 border-gray-700 p-4 rounded-2xl cursor-pointer transition-all flex items-center gap-3" data-weapon="knife">
+                    <i class="fa-solid fa-screwdriver-wrench rotate-45 text-rose-400 text-2xl"></i>
+                    <div class="text-left">
+                        <div class="font-bold text-sm text-white">칼</div>
+                        <div class="text-[10px] text-gray-400">근접 무기</div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="confirm-weapons-btn" disabled class="w-full bg-gray-700 text-gray-400 font-extrabold py-3 rounded-2xl text-sm transition-all shadow-lg">
+                무기 2개 선택 완료 (0/2)
+            </button>
+        </div>
+    </div>
+
     <!-- 하단 HUD -->
-    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 pointer-events-none z-10 flex flex-col gap-3">
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 pointer-events-none z-10 flex flex-col gap-3">
         <div id="hp-versus-container" class="flex justify-between items-center bg-black/70 p-3 rounded-2xl border border-white/10 opacity-0 transition-opacity duration-300">
             <div class="w-2/5">
                 <div class="flex justify-between text-xs font-bold mb-1"><span class="text-blue-400">나</span> <span id="my-hp-text">100 HP</span></div>
@@ -165,43 +225,25 @@
 
         <div class="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-4">
             <div class="bg-black/70 p-3 rounded-lg text-xs text-gray-300 self-start sm:self-auto">
-                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">C</span>: 슬라이딩 | <span class="text-amber-400 font-bold">우클릭</span>: 줌 | <span class="text-amber-400 font-bold">휠/숫자1~4</span>: 교체 | <span class="text-amber-400 font-bold">R</span>: 장전
+                <span class="text-amber-400 font-bold">WASD</span>: 이동 | <span class="text-amber-400 font-bold">C</span>: 슬라이딩 | <span class="text-amber-400 font-bold">우클릭</span>: 줌 | <span class="text-amber-400 font-bold">휠/숫자1~2</span>: 무기교체
             </div>
             
             <div class="flex gap-2 pointer-events-none">
-                <!-- 무기 슬롯 1 : 돌격소총 -->
-                <div id="slot-rifle" class="bg-black/80 px-3 py-2 rounded-xl border-2 border-gray-700 min-w-[140px] flex items-center justify-between transition-all duration-200 weapon-slot-active">
+                <!-- 무기 슬롯 1 -->
+                <div id="slot-1" class="bg-black/80 px-4 py-2 rounded-xl border-2 border-gray-700 min-w-[150px] flex items-center justify-between transition-all duration-200 weapon-slot-active">
                     <div class="flex flex-col items-start">
-                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">1. RIFLE</div>
-                        <div class="text-xs font-extrabold text-white mt-0.5">M4A1</div>
-                        <div class="text-sm font-black text-amber-400 mt-1 tabular-nums" id="ammo-display-rifle">30/30 (3)</div>
+                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">1번 무기</div>
+                        <div class="text-xs font-extrabold text-white mt-0.5" id="slot-1-name">돌격소총</div>
+                        <div class="text-sm font-black text-amber-400 mt-1 tabular-nums" id="slot-1-ammo">30/30 (3)</div>
                     </div>
                 </div>
 
-                <!-- 무기 슬롯 2 : 권총 -->
-                <div id="slot-pistol" class="bg-black/80 px-3 py-2 rounded-xl border-2 border-gray-700 min-w-[140px] flex items-center justify-between transition-all duration-200">
+                <!-- 무기 슬롯 2 -->
+                <div id="slot-2" class="bg-black/80 px-4 py-2 rounded-xl border-2 border-gray-700 min-w-[150px] flex items-center justify-between transition-all duration-200">
                     <div class="flex flex-col items-start">
-                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">2. PISTOL</div>
-                        <div class="text-xs font-extrabold text-white mt-0.5">PISTOL</div>
-                        <div class="text-sm font-black text-gray-400 mt-1 tabular-nums" id="ammo-display-pistol">4/4 (3)</div>
-                    </div>
-                </div>
-
-                <!-- 무기 슬롯 3 : 저격소총 -->
-                <div id="slot-sniper" class="bg-black/80 px-3 py-2 rounded-xl border-2 border-gray-700 min-w-[140px] flex items-center justify-between transition-all duration-200">
-                    <div class="flex flex-col items-start">
-                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">3. SNIPER</div>
-                        <div class="text-xs font-extrabold text-white mt-0.5">SNIPER</div>
-                        <div class="text-sm font-black text-gray-400 mt-1 tabular-nums" id="ammo-display-sniper">1/1 (3)</div>
-                    </div>
-                </div>
-
-                <!-- 무기 슬롯 4 : 칼 -->
-                <div id="slot-knife" class="bg-black/80 px-3 py-2 rounded-xl border-2 border-gray-700 min-w-[120px] flex items-center justify-between transition-all duration-200">
-                    <div class="flex flex-col items-start">
-                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">4. SUB</div>
-                        <div class="text-xs font-extrabold text-white mt-0.5">KNIFE</div>
-                        <div class="text-sm font-black text-gray-400 mt-1">INF</div>
+                        <div class="text-[8px] text-gray-400 font-bold tracking-widest uppercase">2번 무기</div>
+                        <div class="text-xs font-extrabold text-white mt-0.5" id="slot-2-name">권총</div>
+                        <div class="text-sm font-black text-gray-400 mt-1 tabular-nums" id="slot-2-ammo">4/4 (3)</div>
                     </div>
                 </div>
             </div>
@@ -239,17 +281,27 @@
         let opponentId = null;
         let isPlayerReady = false;
 
-        let currentWeapon = 'rifle'; 
-        const weaponList = ['rifle', 'pistol', 'sniper', 'knife'];
+        // 선택된 무기 2개 관리
+        let selectedWeapons = ['rifle', 'pistol']; 
+        let activeSlotIndex = 0; // 0: slot 1, 1: slot 2
+        let tempSelectedWeapons = [];
+
         let isZoomed = false;
         let isGameStarted = false;
 
-        // 슬라이딩 관련 변수
+        // 슬라이딩
         let isSliding = false;
         let slidingTimer = 0;
         let slidingDir = new THREE.Vector3();
 
-        // 무기 스펙 정보
+        // 한글 이름 매핑
+        const weaponKoreanNames = {
+            rifle: '돌격소총',
+            pistol: '권총',
+            sniper: '저격소총',
+            knife: '칼'
+        };
+
         const weaponsData = {
             rifle:  { ammo: 30, maxAmmo: 30, mags: 3, maxMags: 3, isReloading: false, delay: 100, damage: 6.7 },
             pistol: { ammo: 4,  maxAmmo: 4,  mags: 3, maxMags: 3, isReloading: false, delay: 600, damage: 10.0 },
@@ -279,6 +331,10 @@
         const inventoryCloseBtn = document.getElementById('inventory-close-btn');
         const resumeBtn = document.getElementById('resume-btn');
 
+        const weaponSelectModal = document.getElementById('weapon-select-modal');
+        const confirmWeaponsBtn = document.getElementById('confirm-weapons-btn');
+        const matchTimerDisplay = document.getElementById('match-timer-display');
+
         const myHpBar = document.getElementById('my-hp-bar');
         const myHpText = document.getElementById('my-hp-text');
         const enemyHpBar = document.getElementById('enemy-hp-bar');
@@ -297,15 +353,28 @@
         }
 
         function updateAmmoUI() {
-            ['rifle', 'pistol', 'sniper'].forEach(w => {
-                const el = document.getElementById(`ammo-display-${w}`);
-                const data = weaponsData[w];
-                if (data.mags > 0) {
-                    el.innerHTML = `${data.ammo}/${data.maxAmmo} <span class="text-xs text-gray-400">(${data.mags})</span>`;
+            [0, 1].forEach(idx => {
+                const wType = selectedWeapons[idx];
+                const nameEl = document.getElementById(`slot-${idx+1}-name`);
+                const ammoEl = document.getElementById(`slot-${idx+1}-ammo`);
+                
+                nameEl.innerText = weaponKoreanNames[wType];
+
+                if (wType === 'knife') {
+                    ammoEl.innerText = '무제한';
                 } else {
-                    el.innerHTML = `${data.ammo}/${data.maxAmmo} <span class="text-xs text-red-500 font-bold">(EMPTY)</span>`;
+                    const data = weaponsData[wType];
+                    if (data.mags > 0) {
+                        ammoEl.innerText = `${data.ammo}/${data.maxAmmo} (${data.mags})`;
+                    } else {
+                        ammoEl.innerText = `${data.ammo}/${data.maxAmmo} (소진)`;
+                    }
                 }
             });
+        }
+
+        function getCurrentWeaponType() {
+            return selectedWeapons[activeSlotIndex];
         }
 
         function init() {
@@ -351,7 +420,7 @@
             document.addEventListener('mousedown', (e) => {
                 if (!isLocked) return;
                 if (e.button === 0) player.isShooting = true;
-                if (e.button === 2 && currentWeapon !== 'knife') setZoomState(true);
+                if (e.button === 2 && getCurrentWeaponType() !== 'knife') setZoomState(true);
             });
             document.addEventListener('mouseup', (e) => {
                 if (e.button === 0) player.isShooting = false;
@@ -364,7 +433,7 @@
                 isLocked = (document.pointerLockElement === document.body); 
                 if(!isLocked) {
                     setZoomState(false);
-                    if (isGameStarted) {
+                    if (isGameStarted && weaponSelectModal.classList.contains('hidden')) {
                         reconnectBtn.classList.remove('hidden');
                         pauseOverlay.classList.remove('hidden');
                     }
@@ -387,10 +456,69 @@
             pauseOverlay.addEventListener('click', (e) => {
                 if (e.target === pauseOverlay) requestLock();
             });
+
+            setupWeaponSelectionUI();
+        }
+
+        function setupWeaponSelectionUI() {
+            const cards = document.querySelectorAll('.weapon-select-card');
+            cards.forEach(card => {
+                card.addEventListener('click', () => {
+                    const wType = card.dataset.weapon;
+                    if (tempSelectedWeapons.includes(wType)) {
+                        tempSelectedWeapons = tempSelectedWeapons.filter(w => w !== wType);
+                        card.classList.remove('selected');
+                    } else {
+                        if (tempSelectedWeapons.length < 2) {
+                            tempSelectedWeapons.push(wType);
+                            card.classList.add('selected');
+                        }
+                    }
+
+                    if (tempSelectedWeapons.length === 2) {
+                        confirmWeaponsBtn.disabled = false;
+                        confirmWeaponsBtn.className = "w-full bg-amber-500 hover:bg-amber-600 text-black font-black py-3 rounded-2xl text-sm transition-all active:scale-95 shadow-lg cursor-pointer";
+                        confirmWeaponsBtn.innerText = "선택 완료하고 전투 시작";
+                    } else {
+                        confirmWeaponsBtn.disabled = true;
+                        confirmWeaponsBtn.className = "w-full bg-gray-700 text-gray-400 font-extrabold py-3 rounded-2xl text-sm transition-all shadow-lg";
+                        confirmWeaponsBtn.innerText = `무기 2개 선택 완료 (${tempSelectedWeapons.length}/2)`;
+                    }
+                });
+            });
+
+            confirmWeaponsBtn.addEventListener('click', () => {
+                if (tempSelectedWeapons.length === 2) {
+                    selectedWeapons = [...tempSelectedWeapons];
+                    weaponSelectModal.classList.add('hidden');
+                    swapToSlot(0);
+                    updateAmmoUI();
+                    requestLock();
+                }
+            });
+        }
+
+        function startMatchCountdown() {
+            matchTimerDisplay.classList.remove('hidden', 'timer-blink-red');
+            matchTimerDisplay.classList.add('text-amber-400');
+            let count = 3;
+            matchTimerDisplay.innerText = count;
+
+            const timerInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    matchTimerDisplay.innerText = count;
+                } else if (count === 0) {
+                    matchTimerDisplay.innerText = '0';
+                    matchTimerDisplay.classList.remove('text-amber-400');
+                    matchTimerDisplay.classList.add('timer-blink-red');
+                    clearInterval(timerInterval);
+                }
+            }, 1000);
         }
 
         function setZoomState(zoom) {
-            if (currentWeapon === 'knife') zoom = false;
+            if (getCurrentWeaponType() === 'knife') zoom = false;
             isZoomed = zoom;
         }
 
@@ -441,7 +569,7 @@
 
             socket.on('serverFullError', () => {
                 isPlayerReady = false;
-                showResultAlert("🚨 서버 정원 초과! 모든 방이 플레이 중입니다.", "text-orange-500 bg-black/90 border-orange-500");
+                showResultAlert("🚨 서버 정원 초과!", "text-orange-500 bg-black/90 border-orange-500");
                 yawObject.position.set(0, PLAYER_HEIGHT, 12); 
             });
 
@@ -475,10 +603,19 @@
                         weaponsData[w].isReloading = false;
                     }
                 });
+
+                // 무기 선택 모달 초기화 및 표시
+                tempSelectedWeapons = [];
+                document.querySelectorAll('.weapon-select-card').forEach(c => c.classList.remove('selected'));
+                confirmWeaponsBtn.disabled = true;
+                confirmWeaponsBtn.className = "w-full bg-gray-700 text-gray-400 font-extrabold py-3 rounded-2xl text-sm transition-all shadow-lg";
+                confirmWeaponsBtn.innerText = "무기 2개 선택 완료 (0/2)";
                 
-                swapToWeapon('rifle');
-                updateAmmoUI();
+                document.exitPointerLock();
+                weaponSelectModal.classList.remove('hidden');
                 
+                startMatchCountdown();
+
                 myHpBar.style.width = '100%';
                 myHpText.innerText = '100 HP';
                 enemyHpBar.style.width = '100%';
@@ -513,6 +650,9 @@
             socket.on('gameResult', (result) => {
                 gameMode = 'lobby';
                 versusContainer.classList.add('opacity-0');
+                matchTimerDisplay.classList.add('hidden');
+                weaponSelectModal.classList.add('hidden');
+
                 gameStatusEl.innerText = "대기실 (LOBBY)";
                 gameStatusEl.className = "text-xl font-black text-amber-400";
                 
@@ -541,7 +681,8 @@
                         weaponsData[w].mags = weaponsData[w].maxMags;
                     }
                 });
-                swapToWeapon('rifle');
+                selectedWeapons = ['rifle', 'pistol'];
+                swapToSlot(0);
                 updateAmmoUI();
             });
 
@@ -573,15 +714,6 @@
             arenaFloor.position.set(0, -0.5, -35);
             arenaFloor.receiveShadow = true;
             scene.add(arenaFloor);
-
-            const neonGeo = new THREE.BoxGeometry(45, 0.1, 0.1);
-            const neonMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 1 });
-            const neon1 = new THREE.Mesh(neonGeo, neonMat);
-            neon1.position.set(0, 0.05, -12.5);
-            scene.add(neon1);
-            const neon2 = new THREE.Mesh(neonGeo, neonMat);
-            neon2.position.set(0, 0.05, -57.5);
-            scene.add(neon2);
 
             const obsConfigs = [
                 { size: [3, 4, 3], pos: [-8, 2, -20], matIdx: 1 }, 
@@ -667,14 +799,12 @@
             gunContainer.position.set(0.25, -0.2, -0.4);
             camera.add(gunContainer);
 
-            // 돌격소총
             rifleMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(0.1, 0.15, 1.0), 
                 new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.3 })
             );
             gunContainer.add(rifleMesh);
 
-            // 권총
             pistolMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(0.08, 0.12, 0.4), 
                 new THREE.MeshStandardMaterial({ color: 0x3b82f6, metalness: 0.7, roughness: 0.4 })
@@ -682,7 +812,6 @@
             pistolMesh.visible = false;
             gunContainer.add(pistolMesh);
 
-            // 저격소총
             sniperMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(0.1, 0.18, 1.4), 
                 new THREE.MeshStandardMaterial({ color: 0xa855f7, metalness: 0.9, roughness: 0.2 })
@@ -690,7 +819,6 @@
             sniperMesh.visible = false;
             gunContainer.add(sniperMesh);
 
-            // 단검
             knifeMesh = new THREE.Group();
             const blade = new THREE.Mesh( 
                 new THREE.BoxGeometry(0.02, 0.08, 0.45),
@@ -711,31 +839,35 @@
 
         function onWindowWheel(e) {
             if (!isLocked) return;
-            let idx = weaponList.indexOf(currentWeapon);
-            if (e.deltaY > 0) {
-                idx = (idx + 1) % weaponList.length;
-            } else if (e.deltaY < 0) {
-                idx = (idx - 1 + weaponList.length) % weaponList.length;
-            }
-            swapToWeapon(weaponList[idx]);
+            if (e.deltaY > 0) swapToSlot(1);
+            else if (e.deltaY < 0) swapToSlot(0);
         }
 
-        function swapToWeapon(type) {
-            if (currentWeapon === type || (weaponsData[currentWeapon] && weaponsData[currentWeapon].isReloading)) return;
-            currentWeapon = type;
+        function swapToSlot(slotIdx) {
+            const currentW = getCurrentWeaponType();
+            if (weaponsData[currentW] && weaponsData[currentW].isReloading) return;
+            
+            activeSlotIndex = slotIdx;
+            const newW = getCurrentWeaponType();
+
             player.isShooting = false; 
             setZoomState(false);
 
-            rifleMesh.visible = (type === 'rifle');
-            pistolMesh.visible = (type === 'pistol');
-            sniperMesh.visible = (type === 'sniper');
-            knifeMesh.visible = (type === 'knife');
+            rifleMesh.visible = (newW === 'rifle');
+            pistolMesh.visible = (newW === 'pistol');
+            sniperMesh.visible = (newW === 'sniper');
+            knifeMesh.visible = (newW === 'knife');
 
-            ['rifle', 'pistol', 'sniper', 'knife'].forEach(w => {
-                const el = document.getElementById(`slot-${w}`);
-                if (w === type) el.classList.add('weapon-slot-active');
-                else el.classList.remove('weapon-slot-active');
-            });
+            const slot1El = document.getElementById('slot-1');
+            const slot2El = document.getElementById('slot-2');
+
+            if (slotIdx === 0) {
+                slot1El.classList.add('weapon-slot-active');
+                slot2El.classList.remove('weapon-slot-active');
+            } else {
+                slot2El.classList.add('weapon-slot-active');
+                slot1El.classList.remove('weapon-slot-active');
+            }
         }
 
         function triggerSliding() {
@@ -747,7 +879,7 @@
             if (keys['KeyA']) moveDir.x -= 1;
             if (keys['KeyD']) moveDir.x += 1;
 
-            if (moveDir.lengthSq() === 0) moveDir.z = -1; // 입력 없으면 정면
+            if (moveDir.lengthSq() === 0) moveDir.z = -1; 
             moveDir.normalize();
 
             slidingDir.copy(moveDir).applyQuaternion(yawObject.quaternion);
@@ -755,32 +887,24 @@
             slidingDir.normalize();
 
             isSliding = true;
-            slidingTimer = 25; // 약 0.4초간 슬라이딩
+            slidingTimer = 25; 
         }
 
         function onKeyDown(e) {
             keys[e.code] = true;
 
-            // 슬롯 변경 1~4
-            if (e.code === 'Digit1') swapToWeapon('rifle');
-            if (e.code === 'Digit2') swapToWeapon('pistol');
-            if (e.code === 'Digit3') swapToWeapon('sniper');
-            if (e.code === 'Digit4') swapToWeapon('knife');
+            if (e.code === 'Digit1') swapToSlot(0);
+            if (e.code === 'Digit2') swapToSlot(1);
 
-            // C 키 슬라이딩
-            if (e.code === 'KeyC' && isLocked) {
-                triggerSliding();
-            }
+            if (e.code === 'KeyC' && isLocked) triggerSliding();
 
-            // 점프 (슬라이딩 도중 점프 가능)
             if (e.code === 'Space' && player.isGrounded && isLocked) {
                 player.velocity.y = JUMP_FORCE;
                 player.isGrounded = false;
-                if (isSliding) isSliding = false; // 점프 시 슬라이딩 해제
+                if (isSliding) isSliding = false; 
             }
 
-            // 재장전 R
-            if (e.code === 'KeyR' && currentWeapon !== 'knife' && isLocked) {
+            if (e.code === 'KeyR' && getCurrentWeaponType() !== 'knife' && isLocked) {
                 reloadPlayerWeapon();
             }
         }
@@ -796,13 +920,14 @@
         }
 
         function reloadPlayerWeapon() {
-            const wData = weaponsData[currentWeapon];
+            const currentW = getCurrentWeaponType();
+            const wData = weaponsData[currentW];
             if (!wData || wData.mags <= 0 || wData.ammo === wData.maxAmmo || wData.isReloading) return;
 
             setZoomState(false);
             wData.isReloading = true;
-            const el = document.getElementById(`ammo-display-${currentWeapon}`);
-            el.innerHTML = `<span class="text-amber-500 animate-pulse text-xs">RELOAD</span>`;
+            const el = document.getElementById(`slot-${activeSlotIndex+1}-ammo`);
+            el.innerHTML = `<span class="text-amber-500 animate-pulse text-xs">장전 중...</span>`;
             
             setTimeout(() => {
                 wData.ammo = wData.maxAmmo;
@@ -814,19 +939,19 @@
 
         function handleWeaponShooting() {
             if (!isLocked) return;
-            const wData = weaponsData[currentWeapon];
+            const currentW = getCurrentWeaponType();
+            const wData = weaponsData[currentW];
 
-            if (currentWeapon !== 'knife' && wData.isReloading) return;
+            if (currentW !== 'knife' && wData.isReloading) return;
 
-            if (currentWeapon !== 'knife' && wData.ammo <= 0) {
+            if (currentW !== 'knife' && wData.ammo <= 0) {
                 if (wData.mags > 0) reloadPlayerWeapon();
                 return;
             }
 
             const now = performance.now();
             let delay = wData.delay;
-            if (currentWeapon === 'pistol') {
-                // 권총 0.5~1초 랜덤 텀
+            if (currentW === 'pistol') {
                 delay = 500 + Math.random() * 500;
             }
 
@@ -837,10 +962,10 @@
             gunContainer.position.z = recoilZ;
             setTimeout(() => gunContainer.position.z = isZoomed ? -0.25 : -0.4, 60);
 
-            if (currentWeapon !== 'knife') {
+            if (currentW !== 'knife') {
                 wData.ammo--;
                 updateAmmoUI();
-                if (currentWeapon === 'pistol' || currentWeapon === 'sniper') player.isShooting = false; // 단발 사격
+                if (currentW === 'pistol' || currentW === 'sniper') player.isShooting = false; 
             }
 
             const raycaster = new THREE.Raycaster();
@@ -849,7 +974,7 @@
             const startVec = new THREE.Vector3(0.25, -0.15, -0.9).unproject(camera);
             let endVec = new THREE.Vector3();
             
-            const currentRange = currentWeapon === 'knife' ? wData.range : 100;
+            const currentRange = currentW === 'knife' ? wData.range : 100;
             raycaster.ray.at(currentRange, endVec);
 
             const targetMeshes = [];
@@ -859,7 +984,7 @@
                 }
             });
             
-            if (currentWeapon !== 'knife') obstacles.forEach(obs => targetMeshes.push(obs));
+            if (currentW !== 'knife') obstacles.forEach(obs => targetMeshes.push(obs));
 
             const intersects = raycaster.intersectObjects(targetMeshes);
             if (intersects.length > 0) {
@@ -870,7 +995,7 @@
 
                     if (gameMode === 'match' && hit.object.userData.targetId === opponentId) {
                         let finalDamage = wData.damage;
-                        if (currentWeapon === 'sniper') {
+                        if (currentW === 'sniper') {
                             finalDamage = (hit.object.userData.part === 'head') ? wData.damageHead : wData.damageBody;
                         }
                         socket.emit('hitPlayer', { roomId: currentRoomId, targetId: hit.object.userData.targetId, damage: finalDamage });
@@ -878,13 +1003,13 @@
                 }
             }
 
-            if (currentWeapon !== 'knife') renderTracerTrail(startVec, endVec, 0xfacc15); 
+            if (currentW !== 'knife') renderTracerTrail(startVec, endVec, 0xfacc15); 
             
             socket.emit('shoot', { 
                 roomId: currentRoomId, 
                 start: startVec, 
                 end: endVec, 
-                isKnifeAttack: (currentWeapon === 'knife') 
+                isKnifeAttack: (currentW === 'knife') 
             });
         }
 
@@ -909,7 +1034,6 @@
             gunContainer.position.y = THREE.MathUtils.lerp(gunContainer.position.y, targetGunY, 0.2);
             gunContainer.position.z = THREE.MathUtils.lerp(gunContainer.position.z, targetGunZ, 0.2);
 
-            // 카메라 높이 조절 (슬라이딩 시 높이 낮아짐)
             const targetCamY = isSliding ? PLAYER_HEIGHT * 0.5 : PLAYER_HEIGHT;
             
             if (!player.isGrounded) {
@@ -928,7 +1052,6 @@
 
             if (!isLocked) return;
 
-            // 이동 처리 및 슬라이딩
             if (isSliding) {
                 yawObject.position.addScaledVector(slidingDir, PLAYER_SPEED * 1.8);
                 slidingTimer--;
@@ -949,7 +1072,6 @@
                 yawObject.position.addScaledVector(rotatedDir, speed);
             }
 
-            // 장애물 충돌 처리
             if (gameMode === 'match') {
                 obstacles.forEach(obs => {
                     const obsPos = obs.position;
@@ -994,7 +1116,7 @@
                 roomId: currentRoomId, 
                 pos: yawObject.position, 
                 rotY: yawObject.rotation.y,
-                weapon: currentWeapon
+                weapon: getCurrentWeaponType()
             });
         }
 
