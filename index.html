@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>ONLINE FPS ARENA - 재접속 버튼 추가</title>
+    <title>ONLINE FPS ARENA - 인벤토리 추가</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -59,13 +59,56 @@
 
     <div id="crosshair"></div>
 
-    <!-- ESC/Tab 등으로 일시 정지 시 표시되는 중앙 안내 레이어 -->
-    <div id="pause-overlay" class="hidden absolute top-0 left-0 w-full h-full bg-black/50 backdrop-blur-sm flex flex-col justify-center items-center z-40 cursor-pointer">
-        <div class="bg-black/80 border border-amber-500/50 p-6 rounded-2xl text-center shadow-2xl max-w-sm">
+    <!-- ESC/Tab 일시 정지 오버레이 및 인벤토리 -->
+    <div id="pause-overlay" class="hidden absolute top-0 left-0 w-full h-full bg-black/60 backdrop-blur-sm flex justify-center items-center gap-6 z-40">
+        <!-- 일시 정지 안내 카드 -->
+        <div class="bg-black/80 border border-amber-500/50 p-6 rounded-2xl text-center shadow-2xl max-w-sm cursor-pointer" id="pause-card">
             <i class="fa-solid fa-circle-pause text-amber-400 text-4xl mb-3"></i>
             <h2 class="text-xl font-bold text-white mb-1">일시 정지 상태</h2>
-            <p class="text-xs text-gray-300 mb-4">마우스 커서가 해제되었습니다.<br>화면이나 아래 버튼을 클릭하여 계속하세요.</p>
+            <p class="text-xs text-gray-300 mb-4">마우스 커서가 해제되었습니다.<br>이 카드를 클릭하여 게임으로 돌아가세요.</p>
             <span class="inline-block bg-amber-500 text-black text-xs font-black px-4 py-2 rounded-xl">클릭하여 화면 고정</span>
+        </div>
+
+        <!-- 가방(인벤토리) 토글 버튼 -->
+        <button id="inventory-toggle-btn" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-amber-400 p-4 rounded-2xl shadow-2xl transition-all active:scale-95 flex flex-col items-center gap-2">
+            <i class="fa-solid fa-briefcase text-3xl"></i>
+            <span class="text-xs font-bold text-white">가방</span>
+        </button>
+
+        <!-- 인벤토리 창 (초기에는 숨김) -->
+        <div id="inventory-modal" class="hidden bg-gray-900/90 border border-gray-700 p-6 rounded-2xl w-80 shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-briefcase text-amber-400"></i>
+                    <h3 class="font-bold text-white text-base">인벤토리</h3>
+                </div>
+                <button id="inventory-close-btn" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <!-- 인벤토리 아이템 리스트 -->
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between p-3 bg-gray-800/80 border border-gray-700 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-gun text-amber-400 text-lg"></i>
+                        <div>
+                            <div class="text-xs font-bold text-white">돌격 소총</div>
+                            <div class="text-[10px] text-gray-400">기본 주무기 (M4A1)</div>
+                        </div>
+                    </div>
+                    <span class="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded font-bold">보유 중</span>
+                </div>
+
+                <div class="flex items-center justify-between p-3 bg-gray-800/80 border border-gray-700 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-screwdriver-wrench rotate-45 text-rose-400 text-lg"></i>
+                        <div>
+                            <div class="text-xs font-bold text-white">칼</div>
+                            <div class="text-[10px] text-gray-400">기본 보조무기</div>
+                        </div>
+                    </div>
+                    <span class="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded font-bold">보유 중</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -179,7 +222,12 @@
         const introModal = document.getElementById('intro-modal');
         const reconnectBtn = document.getElementById('reconnect-btn');
         const pauseOverlay = document.getElementById('pause-overlay');
-        
+        const pauseCard = document.getElementById('pause-card');
+
+        const inventoryToggleBtn = document.getElementById('inventory-toggle-btn');
+        const inventoryModal = document.getElementById('inventory-modal');
+        const inventoryCloseBtn = document.getElementById('inventory-close-btn');
+
         const slotRifleEl = document.getElementById('slot-rifle');
         const slotKnifeEl = document.getElementById('slot-knife');
         const ammoDisplayRifle = document.getElementById('ammo-display-rifle');
@@ -273,6 +321,7 @@
                 } else {
                     reconnectBtn.classList.add('hidden');
                     pauseOverlay.classList.add('hidden');
+                    inventoryModal.classList.add('hidden');
                 }
             });
 
@@ -283,9 +332,19 @@
                 setTimeout(() => introModal.style.display = 'none', 500);
             });
 
-            // 재접속 버튼 및 오버레이 클릭 시 마우스 고정 복귀
             reconnectBtn.addEventListener('click', requestLock);
-            pauseOverlay.addEventListener('click', requestLock);
+            pauseCard.addEventListener('click', requestLock);
+
+            // 가방 버튼 클릭 이벤트
+            inventoryToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                inventoryModal.classList.toggle('hidden');
+            });
+
+            inventoryCloseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                inventoryModal.classList.add('hidden');
+            });
         }
 
         function setZoomState(zoom) {
